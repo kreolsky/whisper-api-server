@@ -1,0 +1,34 @@
+{
+  "migration_status": "completed",
+  "old_structure_backed_up": true,
+  "new_structure_created": true,
+  "files_migrated": [
+    "app/__init__.py -> app/__init__.py (обновлен)",
+    "app/async_tasks.py -> app/infrastructure/async_tasks/manager.py",
+    "app/audio_processor.py -> app/audio/processor.py",
+    "app/audio_sources.py -> app/audio/sources.py",
+    "app/audio_utils.py -> app/audio/utils.py",
+    "app/cache.py -> app/infrastructure/storage/cache.py",
+    "app/context_managers.py -> app/shared/context_managers.py",
+    "app/file_manager.py -> app/infrastructure/storage/file_manager.py",
+    "app/history_logger.py -> app/shared/history_logger.py",
+    "app/logging_config.py -> app/infrastructure/logging/config.py",
+    "app/request_logger.py -> app/infrastructure/logging/request_logger.py",
+    "app/routes.py -> app/api/routes.py",
+    "app/transcriber_service.py -> app/core/transcription_service.py",
+    "app/transcriber.py -> app/core/transcriber.py",
+    "app/utils.py -> app/shared/decorators.py",
+    "app/validators.py -> app/infrastructure/validation/validators.py"
+  ],
+  "new_directories": [
+    "app/api/",
+    "app/core/",
+    "app/audio/",
+    "app/infrastructure/",
+    "app/infrastructure/logging/",
+    "app/infrastructure/storage/",
+    "app/infrastructure/async_tasks/",
+    "app/infrastructure/validation/",
+    "app/shared/"
+  ]
+}

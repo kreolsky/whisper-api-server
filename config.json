@@ -1,14 +1,29 @@
 {
     "service_port": 5042,
-    "model_path": "/home/text-generation/models.whisper/antony-ties-podlodka-v1.2",
-    "language": "russian",
+    "model_path": "/home/text-generation/models/whisper/podlodka-turbo",
+    "language": "ru",
     "enable_history": true,
     "chunk_length_s": 28,
-    "batch_size": 8,
+    "batch_size": 6,
     "max_new_tokens": 384,
     "temperature": 0.01,
     "return_timestamps": false,
     "audio_rate": 8000,
     "norm_level": "-0.55",
-    "compand_params": "0.3,1 -90,-90,-70,-50,-40,-15,0,0 -7 0 0.15"
+    "compand_params": "0.3,1 -90,-90,-70,-50,-40,-15,0,0 -7 0 0.15",
+    "audio_speed_factor": 1.0,
+    "file_validation": {
+        "max_file_size_mb": 500,
+        "allowed_extensions": [".wav", ".mp3", ".ogg", ".flac", ".m4a", ".oga"],
+        "allowed_mime_types": ["audio/wav", "audio/mpeg", "audio/ogg", "audio/flac", "audio/mp4", "audio/x-m4a"]
+    },
+    "allowed_directories": [],
+    "version": "1.0.0",
+    "log_level": "INFO",
+    "log_file": "logs/whisper_api.log",
+    "request_logging": {
+        "exclude_endpoints": ["/health", "/static"],
+        "sensitive_headers": ["authorization", "cookie", "set-cookie", "proxy-authorization", "x-api-key"],
+        "log_debug": true
+    }
 }

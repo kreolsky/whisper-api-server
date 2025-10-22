@@ -1,0 +1,1621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Transcription</title>
+    <style>
+        :root {
+            --primary-color: #2d3e50;
+            --accent-color: #3498db;
+            --secondary-accent: #2ecc71;
+            --text-color: #333;
+            --light-bg: #f5f5f5;
+            --border-color: #ddd;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+            --transition-speed: 0.3s;
+            --hover-bg: #e5e5e5;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #ebebeb;
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 100vh;
+        }
+        
+        main {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem 0;
+        }
+        
+        .container {
+            display: flex;
+            width: 90%;
+            max-width: 1200px;
+            height: 80vh;
+            background-color: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 24px var(--shadow-color);
+        }
+        
+        .left-panel {
+            flex: 0.4;
+            padding: 2rem;
+            background-color: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            border-right: 1px solid var(--border-color);
+        }
+        
+        .right-panel {
+            flex: 0.6;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        
+        .upload-files-block {
+            width: 100%;
+            border: 3px dashed var(--border-color);
+            border-radius: 12px;
+            background-color: white;
+            overflow: hidden;
+            margin-bottom: 0;
+        }
+        
+        .upload-files-block.active {
+            border-color: var(--secondary-accent);
+            box-shadow: 0 6px 18px rgba(46, 204, 113, 0.25);
+        }
+        
+        .upload-files-block.active .upload-icon {
+            color: var(--secondary-accent);
+        }
+        
+        .upload-area {
+            width: 100%;
+            height: 250px;
+            border: none;
+            border-bottom: 1px solid var(--border-color);
+            border-radius: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            background-color: rgba(255, 255, 255, 0.6);
+            margin: 0; /* Remove any margin */
+            padding: 0; /* Remove any padding */
+        }
+        
+        .upload-area:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(229, 229, 229, 0.1) 0%, rgba(229, 229, 229, 0.2) 100%);
+            opacity: 0;
+            transition: opacity var(--transition-speed) ease;
+            z-index: 0;
+        }
+        
+        .upload-area:hover:before {
+            opacity: 1;
+        }
+        
+        .upload-area:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .upload-files-block.active .upload-area {
+            background-color: rgba(46, 204, 113, 0.05);
+            transform: scale(1.01);
+        }
+        
+        .upload-area .upload-content {
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            text-align: center;
+            padding: 2.5rem 1.5rem 0.8rem 1.5rem;
+            gap: 0rem;
+            height: 100%;
+            width: 100%;
+        }
+        
+        .upload-area .upload-content .icon-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .upload-area .upload-content .text-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.125rem;
+        }
+        
+        .upload-area .upload-content p {
+            margin: 0;
+            font-size: 14px;
+            color: #999;
+            font-weight: normal;
+        }
+        
+        .upload-area .upload-content small {
+            margin: 0;
+            font-size: 14px;
+            color: #999;
+            font-weight: normal;
+        }
+        
+        .upload-icon {
+            font-size: 6rem;
+            color: var(--primary-color);
+            transition: transform 0.5s ease;
+        }
+        
+        .upload-area:hover .upload-icon {
+            transform: translateY(-5px);
+        }
+        
+        .files-queue {
+            width: 100%;
+            background-color: white;
+            display: flex;
+            flex-direction: column;
+            margin: 0; /* Remove any margin */
+            padding: 0; /* Remove any padding */
+        }
+        
+        .files-container {
+            overflow-y: hidden;
+            min-height: 300px;
+            max-height: 300px;
+            margin: 0; /* Remove any margin */
+            padding: 0; /* Remove any padding */
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .files-container.has-files {
+            overflow-y: auto;
+        }
+        
+        .no-files-message {
+            text-align: center;
+            color: #aaa;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .file-item {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            min-height: 64px;
+            box-sizing: border-box;
+            margin: 0; /* Remove any margin */
+        }
+        
+        .file-item:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .file-item.active {
+            background-color: var(--accent-color);
+            color: white;
+        }
+        
+        .file-item.active .file-status {
+            color: rgba(255, 255, 255, 0.8);
+        }
+        
+        .file-item:last-child {
+            border-bottom: none;
+        }
+        
+        .file-name {
+            font-weight: 500;
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .file-status {
+            font-size: 12px;
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .file-status.processing {
+            color: var(--accent-color);
+        }
+        
+        .file-status.completed {
+            color: var(--secondary-accent);
+        }
+        
+        .file-status.error {
+            color: #e74c3c;
+        }
+        
+        .file-status.queued {
+            color: #f39c12;
+        }
+        
+        .status-icon {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        
+        .status-icon.processing {
+            background-color: var(--accent-color);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        .status-icon.completed {
+            background-color: var(--secondary-accent);
+        }
+        
+        .status-icon.error {
+            background-color: #e74c3c;
+        }
+        
+        .status-icon.queued {
+            background-color: #f39c12;
+        }
+        
+        .clear-queue-btn-small {
+            width: 40px;
+            height: 36px;
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+            align-self: flex-end;
+            margin-top: 12px;
+        }
+        
+        .clear-queue-btn-small:hover:not(:disabled) {
+            background-color: #c0392b;
+        }
+        
+        .clear-queue-btn-small:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .features h2 {
+            margin-bottom: 1rem;
+            font-size: 20px;
+            color: var(--primary-color);
+        }
+        
+        .features ul {
+            padding-left: 1.5rem;
+        }
+        
+        .features li {
+            margin-bottom: 0.8rem;
+            font-size: 16px;
+        }
+        
+        .player-container {
+            width: 100%;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+        }
+        
+        .file-info {
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .audio-player {
+            width: 100%;
+            outline: none;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+        }
+        
+        .audio-player::-webkit-media-controls-panel {
+            background-color: #f8f9fa;
+        }
+        
+        .content-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            min-height: 300px;
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
+
+        .transcript-placeholder, .debug-placeholder {
+            color: #aaa;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            width: 80%;
+        }
+
+        .tabs-content {
+            flex: 1;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .tab-panel {
+            flex: 1;
+            display: none;
+            position: relative;
+            overflow-y: auto;
+            padding: 1.5rem;
+            background-color: #fff;
+        }
+        
+        .tab-panel.active {
+            display: block;
+        }
+        
+        .controls-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 12px;
+        }
+        
+        .tabs-navigation {
+            display: flex;
+        }
+        
+        .tab-button {
+            padding: 8px 16px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            margin-right: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        
+        .tab-button:not(.active) {
+            background-color: #f1f1f1;
+            color: var(--text-color);
+        }
+        
+        .tab-button:hover:not(.active) {
+            background-color: var(--hover-bg);
+        }
+        
+        .transcript-placeholder {
+            color: #aaa;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            width: 80%;
+        }
+        
+        .download-icons {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .download-button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 40px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+        }
+        
+        .download-button:hover {
+            background-color: #34495e;
+        }
+        
+        .download-button.copied {
+            background-color: var(--secondary-accent);
+            transform: scale(1.1);
+        }
+        
+        .download-button.hidden {
+            display: none;
+        }
+        
+        #transcript-content {
+            min-height: 100%;
+            display: none;
+        }
+        
+        #transcript-editor {
+            width: 100%;
+            height: 100%;
+            border: none;
+            outline: none;
+            resize: none;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 16px;
+            line-height: 1.5;
+            padding: 0;
+            margin: 0;
+        }
+        
+        #file-input {
+            display: none;
+        }
+        
+        .status {
+            margin-top: 1rem;
+            padding: 0.5rem;
+            border-radius: 4px;
+            text-align: center;
+            display: none;
+        }
+        
+        .status.error {
+            background-color: #ffebee;
+            color: #c62828;
+            display: block;
+        }
+        
+        .status.success {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+            display: block;
+        }
+        
+        .status.loading {
+            display: block;
+            color: var(--primary-color);
+        }
+        
+        .debug-panel {
+            margin-top: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .debug-header {
+            background-color: #f1f1f1;
+            padding: 0.5rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .debug-header h3 {
+            margin: 0;
+            font-size: 16px;
+        }
+        
+        .debug-content {
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        
+        .debug-item {
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px dashed #ddd;
+        }
+        
+        .debug-item:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        
+        .debug-label {
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 0.25rem;
+        }
+        
+        .debug-value {
+            margin-left: 1rem;
+        }
+        
+        footer {
+            background-color: #d5d5d5;
+            color: #555;
+            text-align: center;
+            padding: 1rem;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        .loading-spinner {
+            display: inline-block;
+            width: 80px;
+            height: 80px;
+            border: 10px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top-color: var(--accent-color);
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .processing-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            display: none;
+        }
+        
+        .processing-text {
+            margin-top: 10px;
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+        
+        .timer {
+            margin-top: 5px;
+            color: var(--primary-color);
+        }
+        
+        .upload-progress {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0%;
+            height: 4px;
+            background: linear-gradient(to right, var(--accent-color), var(--secondary-accent));
+            transition: width 0.3s ease-out;
+            border-radius: 0 2px 2px 0;
+            display: none;
+        }
+        
+        @media (max-width: 768px) {
+            main {
+                padding: 1rem;
+                align-items: flex-start;
+            }
+            
+            .container {
+                flex-direction: column;
+                width: 100%;
+                max-width: 100%;
+                margin: 0;
+                border-radius: 4px;
+                height: auto;
+            }
+            
+            .left-panel, .right-panel {
+                flex: none;
+                width: 100%;
+                padding: 1.5rem;
+                box-sizing: border-box;
+            }
+            
+            .upload-area {
+                height: 180px;
+            }
+            
+            .upload-area .upload-content {
+                padding: 1.75rem 1rem 0.6rem 1rem;
+            }
+            
+            .upload-icon {
+                font-size: 4.5rem;
+            }
+            
+            .files-container {
+                min-height: 220px;
+                max-height: 220px;
+            }
+            
+            .content-container {
+                min-height: 250px;
+            }
+            
+            .controls-container {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+            
+            .tabs-navigation {
+                width: 100%;
+                margin-bottom: 8px;
+            }
+            
+            .download-icons {
+                width: 100%;
+                justify-content: flex-end;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="container">
+            <div class="left-panel">
+                <div class="upload-files-block" id="upload-files-block">
+                    <div class="upload-area" id="upload-area">
+                        <div class="upload-progress" id="upload-progress"></div>
+                        <div class="upload-content">
+                            <div class="icon-container">
+                                <div class="upload-icon">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="text-container">
+                                <p>Drag audio files here</p>
+                                <small>Multiple files supported</small>
+                            </div>
+                        </div>
+                        <input type="file" id="file-input" accept="audio/*,.ogg" multiple />
+                    </div>
+                    
+                    <div class="files-queue" id="files-queue">
+                        <div class="files-container" id="files-container">
+                            <div class="no-files-message" id="no-files-message">
+                                No files uploaded yet
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <button class="clear-queue-btn-small" id="clear-queue-btn" title="Clear Queue" disabled>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h18"></path>
+                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                        <path d="M8 6V4c0-1 1-2 2-2h4c-1 0 2 1 2 2v2"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="right-panel">
+                <div class="player-container" id="player-container">
+                    <div class="file-info" id="file-info">No file selected</div>
+                    <audio id="audio-player" class="audio-player" controls disabled></audio>
+                </div>
+                
+                <div class="content-container">
+                    <div class="tabs-content">
+                        <div id="transcript-tab" class="tab-panel active">
+                            <div class="transcript-placeholder" id="transcript-placeholder">
+                                Your transcription will appear here
+                            </div>
+                            <div id="transcript-content"></div>
+                            <textarea id="transcript-editor"></textarea>
+                            
+                            <div class="processing-overlay" id="processing-overlay">
+                                <div class="loading-spinner"></div>
+                                <div class="processing-text">Processing audio...</div>
+                                <div class="timer" id="timer">00:00</div>
+                            </div>
+                        </div>
+                        <div id="debug-tab" class="tab-panel">
+                            <div class="debug-placeholder" id="debug-placeholder">
+                                API requests and responses will appear here
+                            </div>
+                            <div class="debug-content" id="debug-info"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="controls-container">
+                        <div class="tabs-navigation">
+                            <button id="transcript-tab-btn" class="tab-button active">Transcription</button>
+                            <button id="debug-tab-btn" class="tab-button">Debug</button>
+                        </div>
+                        
+                        <div class="download-icons">
+                            <button class="download-button" id="copy-text" title="Copy to Clipboard">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                            </button>
+                            <button class="download-button" id="download-text" title="Download as Text">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                            </button>
+                            <button class="download-button" id="download-all" title="Download All Files">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="5 10 9 14 13 10"></polyline>
+                                    <line x1="9" y1="14" x2="9" y2="3"></line>
+                                    <polyline points="11 10 15 14 19 10"></polyline>
+                                    <line x1="15" y1="14" x2="15" y2="3"></line>
+                                </svg>
+                            </button>
+                            <button class="download-button" id="download-json" title="Download JSON">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <footer>
+        © Audio Transcription Tool 2025 (v0.5.2)
+    </footer>
+
+    <script>
+        // Configuration. The same as in nginx path
+        const proxyPath = '/tools/transcription';
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const uploadArea = document.getElementById('upload-area');
+            const uploadFilesBlock = document.getElementById('upload-files-block');
+            const fileInput = document.getElementById('file-input');
+            const transcriptPlaceholder = document.getElementById('transcript-placeholder');
+            const transcriptContent = document.getElementById('transcript-content');
+            const transcriptEditor = document.getElementById('transcript-editor');
+            const audioPlayer = document.getElementById('audio-player');
+            const fileInfo = document.getElementById('file-info');
+            const statusEl = document.getElementById('status');
+            const debugInfo = document.getElementById('debug-info');
+            const processingOverlay = document.getElementById('processing-overlay');
+            const timerElement = document.getElementById('timer');
+            const uploadProgress = document.getElementById('upload-progress');
+            const copyTextBtn = document.getElementById('copy-text');
+            const downloadTextBtn = document.getElementById('download-text');
+            const downloadAllBtn = document.getElementById('download-all');
+            const downloadJsonBtn = document.getElementById('download-json');
+            const filesContainer = document.getElementById('files-container');
+            const noFilesMessage = document.getElementById('no-files-message');
+            const clearQueueBtn = document.getElementById('clear-queue-btn');
+            
+            // Tab navigation
+            const transcriptTabBtn = document.getElementById('transcript-tab-btn');
+            const debugTabBtn = document.getElementById('debug-tab-btn');
+            const transcriptTab = document.getElementById('transcript-tab');
+            const debugTab = document.getElementById('debug-tab');
+            
+            // Tab switching
+            transcriptTabBtn.addEventListener('click', () => {
+                activateTab(transcriptTabBtn, transcriptTab);
+            });
+            
+            debugTabBtn.addEventListener('click', () => {
+                activateTab(debugTabBtn, debugTab);
+            });
+            
+            function activateTab(button, panel) {
+                // Deactivate all tabs
+                [transcriptTabBtn, debugTabBtn].forEach(btn => btn.classList.remove('active'));
+                [transcriptTab, debugTab].forEach(tab => tab.classList.remove('active'));
+                
+                // Activate the selected tab
+                button.classList.add('active');
+                panel.classList.add('active');
+                
+                // Show/hide buttons based on active tab
+                updateButtonVisibility(button);
+            }
+            
+            function updateButtonVisibility(activeButton) {
+                if (activeButton === transcriptTabBtn) {
+                    // Show transcript-related buttons, hide JSON download
+                    copyTextBtn.classList.remove('hidden');
+                    downloadTextBtn.classList.remove('hidden');
+                    downloadAllBtn.classList.remove('hidden');
+                    downloadJsonBtn.classList.add('hidden');
+                } else if (activeButton === debugTabBtn) {
+                    // Hide transcript buttons, show JSON download
+                    copyTextBtn.classList.add('hidden');
+                    downloadTextBtn.classList.add('hidden');
+                    downloadAllBtn.classList.add('hidden');
+                    downloadJsonBtn.classList.remove('hidden');
+                }
+            }
+            
+            // File management system
+            let fileManager = {
+                files: new Map(), // fileId -> {file, name, status, transcription, json, audioUrl, debugInfo}
+                activeFileId: null,
+                processingQueue: [],
+                isProcessing: false
+            };
+            
+            let timerInterval = null;
+            let startTime = 0;
+            
+            function addDebugInfo(label, value, fileId = null) {
+                // Use current processing file if no fileId specified
+                const targetFileId = fileId || fileManager.activeFileId;
+                if (!targetFileId) return;
+                
+                const fileData = fileManager.files.get(targetFileId);
+                if (!fileData) return;
+                
+                // Initialize debug info if not exists
+                if (!fileData.debugInfo) {
+                    fileData.debugInfo = [];
+                }
+                
+                // Add debug entry
+                fileData.debugInfo.push({
+                    label,
+                    value,
+                    timestamp: new Date().toLocaleTimeString()
+                });
+                
+                // Update UI if this is the active file
+                if (targetFileId === fileManager.activeFileId) {
+                    updateDebugUI(fileData.debugInfo);
+                }
+                
+                // Switch to debug tab when error occurs
+                if (label === 'Fetch Error' || label === 'Error Response') {
+                    activateTab(debugTabBtn, debugTab);
+                }
+            }
+            
+            function updateDebugUI(debugInfoArray) {
+                debugInfo.innerHTML = '';
+                
+                if (!debugInfoArray || debugInfoArray.length === 0) {
+                    document.getElementById('debug-placeholder').style.display = 'block';
+                    return;
+                }
+                
+                document.getElementById('debug-placeholder').style.display = 'none';
+                
+                debugInfoArray.forEach(entry => {
+                    const debugItem = document.createElement('div');
+                    debugItem.className = 'debug-item';
+                    
+                    const debugLabel = document.createElement('div');
+                    debugLabel.className = 'debug-label';
+                    debugLabel.textContent = `${entry.label} (${entry.timestamp})`;
+                    
+                    const debugValue = document.createElement('div');
+                    debugValue.className = 'debug-value';
+                    
+                    if (typeof entry.value === 'object') {
+                        debugValue.textContent = JSON.stringify(entry.value, null, 2);
+                    } else {
+                        debugValue.textContent = entry.value;
+                    }
+                    
+                    debugItem.appendChild(debugLabel);
+                    debugItem.appendChild(debugValue);
+                    debugInfo.appendChild(debugItem);
+                });
+                
+                // Auto-scroll debug panel
+                if (debugTab.scrollHeight > debugTab.clientHeight) {
+                    debugTab.scrollTop = debugTab.scrollHeight;
+                }
+            }
+            
+            function clearDebugInfo() {
+                // Only clear UI, keep file data
+                debugInfo.innerHTML = '';
+                document.getElementById('debug-placeholder').style.display = 'block';
+            }
+            
+            // Handle drag and drop events on entire upload block
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                uploadFilesBlock.addEventListener(eventName, preventDefaults, false);
+                document.body.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            // Highlight drop area when dragging over it
+            ['dragenter', 'dragover'].forEach(eventName => {
+                uploadFilesBlock.addEventListener(eventName, highlight, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                uploadFilesBlock.addEventListener(eventName, unhighlight, false);
+            });
+            
+            function highlight() {
+                uploadFilesBlock.classList.add('active');
+            }
+            
+            function unhighlight() {
+                uploadFilesBlock.classList.remove('active');
+            }
+            
+            // Handle dropped files
+            uploadFilesBlock.addEventListener('drop', handleDrop, false);
+            
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                
+                if (files.length > 0) {
+                    handleFiles(files);
+                }
+            }
+            
+            // Handle file input change
+            uploadArea.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            fileInput.addEventListener('change', (e) => {
+                if (fileInput.files.length > 0) {
+                    handleFiles(fileInput.files);
+                }
+            });
+            
+            function handleFiles(files) {
+                const audioFiles = Array.from(files).filter(file => 
+                    file.type.startsWith('audio/') || file.name.toLowerCase().endsWith('.ogg')
+                );
+                
+                if (audioFiles.length === 0) {
+                    showStatus('Please select audio files.', 'error');
+                    return;
+                }
+                
+                // Add files to manager
+                audioFiles.forEach(file => {
+                    const fileId = generateFileId();
+                    const audioUrl = URL.createObjectURL(file);
+                    
+                    fileManager.files.set(fileId, {
+                        file: file,
+                        name: file.name,
+                        status: 'queued',
+                        transcription: '',
+                        json: null,
+                        audioUrl: audioUrl,
+                        debugInfo: []
+                    });
+                    
+                    fileManager.processingQueue.push(fileId);
+                    addFileToUI(fileId);
+                });
+                
+                updateFilesCount();
+                
+                // Start processing queue
+                if (!fileManager.isProcessing) {
+                    processNextFile();
+                }
+            }
+            
+            function generateFileId() {
+                return 'file_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            }
+            
+            function addFileToUI(fileId) {
+                const fileData = fileManager.files.get(fileId);
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.dataset.fileId = fileId;
+                
+                fileItem.innerHTML = `
+                    <div class="file-name" title="${fileData.name}">${fileData.name}</div>
+                    <div class="file-status queued">
+                        <span class="status-icon queued"></span>
+                        <span class="status-text">Waiting for transcription</span>
+                    </div>
+                `;
+                
+                fileItem.addEventListener('click', () => selectFile(fileId));
+                
+                noFilesMessage.style.display = 'none';
+                
+                // Add new files to the TOP of the container (prepend instead of append)
+                if (filesContainer.firstChild && filesContainer.firstChild !== noFilesMessage) {
+                    filesContainer.insertBefore(fileItem, filesContainer.firstChild);
+                } else {
+                    filesContainer.appendChild(fileItem);
+                }
+            }
+            
+            function updateFilesCount() {
+                const count = fileManager.files.size;
+                
+                // Enable/disable clear button
+                clearQueueBtn.disabled = count === 0;
+                
+                // Show/hide no files message and manage scroll
+                if (count === 0) {
+                    noFilesMessage.style.display = 'flex';
+                    filesContainer.classList.remove('has-files');
+                } else {
+                    noFilesMessage.style.display = 'none';
+                    filesContainer.classList.add('has-files');
+                }
+            }
+            
+            function selectFile(fileId) {
+                const fileData = fileManager.files.get(fileId);
+                if (!fileData) return;
+                
+                // Update active file
+                fileManager.activeFileId = fileId;
+                
+                // Update UI selection
+                document.querySelectorAll('.file-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                document.querySelector(`[data-file-id="${fileId}"]`).classList.add('active');
+                
+                // Setup audio player
+                setupAudioPlayer(fileData.file, fileData.audioUrl);
+                
+                // Load transcription if available
+                loadTranscription(fileData);
+                
+                // Show processing overlay if this file is currently being processed
+                if (fileData.status === 'processing') {
+                    processingOverlay.style.display = 'flex';
+                    transcriptPlaceholder.style.display = 'none';
+                } else {
+                    processingOverlay.style.display = 'none';
+                }
+            }
+            
+            function loadTranscription(fileData) {
+                if (fileData.transcription) {
+                    transcriptPlaceholder.style.display = 'none';
+                    transcriptEditor.value = fileData.transcription;
+                } else {
+                    transcriptEditor.value = '';
+                    if (fileData.status !== 'processing') {
+                        transcriptPlaceholder.style.display = 'block';
+                    }
+                }
+                
+                // Load debug info
+                updateDebugUI(fileData.debugInfo);
+            }
+            
+            function processNextFile() {
+                if (fileManager.processingQueue.length === 0) {
+                    fileManager.isProcessing = false;
+                    return;
+                }
+                
+                fileManager.isProcessing = true;
+                // Process files from the BEGINNING of the queue (oldest files first)
+                // This means files will be processed from bottom to top in the UI
+                const fileId = fileManager.processingQueue.shift();
+                const fileData = fileManager.files.get(fileId);
+                
+                if (!fileData) {
+                    processNextFile();
+                    return;
+                }
+                
+                // Update file status
+                updateFileStatus(fileId, 'processing', 'Processing...');
+                
+                // Select this file if none is selected
+                if (!fileManager.activeFileId) {
+                    selectFile(fileId);
+                }
+                
+                // Start processing
+                uploadFile(fileData.file, fileId);
+            }
+            
+            function setupAudioPlayer(file, audioUrl) {
+                // Set the source for the audio player
+                audioPlayer.src = audioUrl || URL.createObjectURL(file);
+                audioPlayer.disabled = false;
+                
+                // Update file info
+                fileInfo.textContent = `${file.name} (${formatFileSize(file.size)})`;
+            }
+            
+            function updateFileStatus(fileId, status, statusText) {
+                const fileData = fileManager.files.get(fileId);
+                if (!fileData) return;
+                
+                fileData.status = status;
+                
+                const fileItem = document.querySelector(`[data-file-id="${fileId}"]`);
+                if (!fileItem) return;
+                
+                const statusIcon = fileItem.querySelector('.status-icon');
+                const statusTextEl = fileItem.querySelector('.status-text');
+                
+                // Remove all status classes
+                statusIcon.className = 'status-icon';
+                statusIcon.classList.add(status);
+                
+                statusTextEl.textContent = statusText;
+                
+                const statusContainer = fileItem.querySelector('.file-status');
+                statusContainer.className = 'file-status';
+                statusContainer.classList.add(status);
+                
+                // Update processing overlay if this is the active file
+                if (fileManager.activeFileId === fileId) {
+                    if (status === 'processing') {
+                        processingOverlay.style.display = 'flex';
+                        transcriptPlaceholder.style.display = 'none';
+                    } else if (status === 'completed' || status === 'error') {
+                        processingOverlay.style.display = 'none';
+                        if (!fileData.transcription) {
+                            transcriptPlaceholder.style.display = 'block';
+                        }
+                    }
+                }
+            }
+            
+            function formatFileSize(bytes) {
+                if (bytes < 1024) return bytes + ' B';
+                else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+                else return (bytes / 1048576).toFixed(1) + ' MB';
+            }
+            
+            function startTimer() {
+                startTime = Date.now();
+                
+                // Show processing overlay only if the processing file is the active file
+                if (fileManager.activeFileId && fileManager.processingQueue.length > 0) {
+                    const processingFileId = fileManager.processingQueue[0] || Object.keys(fileManager.files).find(id => fileManager.files.get(id).status === 'processing');
+                    if (fileManager.activeFileId === processingFileId) {
+                        processingOverlay.style.display = 'flex';
+                        // Hide placeholder text during processing
+                        transcriptPlaceholder.style.display = 'none';
+                    }
+                }
+                
+                // Switch to transcript tab when processing starts
+                activateTab(transcriptTabBtn, transcriptTab);
+                
+                clearInterval(timerInterval);
+                timerInterval = setInterval(updateTimer, 1000);
+                updateTimer(); // Initial call to show 00:00
+            }
+            
+            function stopTimer() {
+                clearInterval(timerInterval);
+                processingOverlay.style.display = 'none';
+                
+                // Show placeholder back only if there's no transcription for active file
+                const activeFile = fileManager.activeFileId ? fileManager.files.get(fileManager.activeFileId) : null;
+                if (!activeFile || !activeFile.transcription) {
+                    transcriptPlaceholder.style.display = 'block';
+                }
+            }
+            
+            function updateTimer() {
+                const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+                const minutes = Math.floor(elapsedTime / 60).toString().padStart(2, '0');
+                const seconds = (elapsedTime % 60).toString().padStart(2, '0');
+                timerElement.textContent = `${minutes}:${seconds}`;
+            }
+            
+            function uploadFile(file, fileId) {
+                startTimer(fileId);
+                clearDebugInfo();
+                
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('model', 'whisper-1');
+                
+                // Show upload progress indicator
+                uploadProgress.style.display = 'block';
+                
+                // Dynamically determine API URL based on current path
+                let apiUrl;
+                if (window.location.pathname.includes(proxyPath)) {
+                    // Access through nginx proxy
+                    apiUrl = `${proxyPath}/v1/audio/transcriptions`;
+                } else {
+                    // Direct access to the server
+                    apiUrl = '/v1/audio/transcriptions';
+                }
+                
+                addDebugInfo('Request URL', apiUrl, fileId);
+                addDebugInfo('File Name', file.name, fileId);
+                addDebugInfo('File Size', `${(file.size / 1024).toFixed(2)} KB`, fileId);
+                addDebugInfo('File Type', file.type || 'audio/ogg', fileId);
+                addDebugInfo('Request Time', new Date().toLocaleTimeString(), fileId);
+                
+                // Simulate upload progress for better UX
+                let progressInterval = simulateUploadProgress();
+                
+                fetch(apiUrl, {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    clearInterval(progressInterval);
+                    uploadProgress.style.width = '100%';
+                    
+                    addDebugInfo('Response Status', `${response.status} ${response.statusText}`, fileId);
+                    addDebugInfo('Response Headers', Object.fromEntries([...response.headers]), fileId);
+                    
+                    if (!response.ok) {
+                        return response.text().then(text => {
+                            addDebugInfo('Error Response', text, fileId);
+                            throw new Error(`Server responded with ${response.status}: ${text}`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    stopTimer();
+                    addDebugInfo('Response Data', data, fileId);
+                    
+                    // Store results
+                    const fileData = fileManager.files.get(fileId);
+                    if (fileData) {
+                        fileData.transcription = data.text || data;
+                        fileData.json = data;
+                    }
+                    
+                    // Update status
+                    updateFileStatus(fileId, 'completed', 'Completed');
+                    
+                    // Hide upload progress after a short delay
+                    setTimeout(() => {
+                        uploadProgress.style.width = '0%';
+                        uploadProgress.style.display = 'none';
+                    }, 500);
+                    
+                    // Show transcription if this is the active file
+                    if (fileManager.activeFileId === fileId) {
+                        showTranscription(data.text || data);
+                    }
+                    
+                    // Process next file in queue
+                    processNextFile();
+                })
+                .catch(error => {
+                    stopTimer();
+                    console.error('Error:', error);
+                    addDebugInfo('Fetch Error', error.message, fileId);
+                    
+                    // Update status
+                    updateFileStatus(fileId, 'error', 'Error');
+                    
+                    // Hide upload progress
+                    uploadProgress.style.width = '0%';
+                    uploadProgress.style.display = 'none';
+                    
+                    // Process next file in queue
+                    processNextFile();
+                });
+            }
+            
+            function simulateUploadProgress() {
+                let progress = 0;
+                uploadProgress.style.width = '0%';
+                
+                return setInterval(() => {
+                    // Simulate slower progress as it gets closer to 100%
+                    const increment = (100 - progress) / 10;
+                    progress += Math.min(increment, 5);
+                    
+                    // Cap at 90% - the real completion will set to 100%
+                    if (progress >= 90) {
+                        progress = 90;
+                        clearInterval(progressInterval);
+                    }
+                    
+                    uploadProgress.style.width = `${progress}%`;
+                }, 300);
+            }
+            
+            function showTranscription(text) {
+                transcriptPlaceholder.style.display = 'none';
+                
+                // Set text in editor directly (always in edit mode)
+                transcriptEditor.value = text;
+                
+                // Make sure transcript tab is active
+                activateTab(transcriptTabBtn, transcriptTab);
+            }
+            
+            // Update active file transcription when editor changes
+            transcriptEditor.addEventListener('input', () => {
+                if (fileManager.activeFileId) {
+                    const fileData = fileManager.files.get(fileManager.activeFileId);
+                    if (fileData) {
+                        fileData.transcription = transcriptEditor.value;
+                    }
+                }
+            });
+            
+            function getCurrentFileData() {
+                if (!fileManager.activeFileId) return null;
+                return fileManager.files.get(fileManager.activeFileId);
+            }
+            
+            function getCurrentFileName() {
+                const fileData = getCurrentFileData();
+                if (!fileData) return 'transcription';
+                return fileData.name.replace(/\.[^/.]+$/, ''); // Remove extension
+            }
+            
+            function clearQueue() {
+                // Clear processing
+                fileManager.isProcessing = false;
+                fileManager.processingQueue = [];
+                
+                // Clean up object URLs
+                fileManager.files.forEach(fileData => {
+                    if (fileData.audioUrl) {
+                        URL.revokeObjectURL(fileData.audioUrl);
+                    }
+                });
+                
+                // Clear all data
+                fileManager.files.clear();
+                fileManager.activeFileId = null;
+                
+                // Clear UI
+                filesContainer.innerHTML = '';
+                updateFilesCount();
+                
+                // Reset audio player
+                audioPlayer.src = '';
+                audioPlayer.disabled = true;
+                fileInfo.textContent = 'No file selected';
+                
+                // Clear transcription and debug
+                transcriptEditor.value = '';
+                transcriptPlaceholder.style.display = 'block';
+                clearDebugInfo();
+                
+                // Hide processing overlay
+                if (processingOverlay.style.display === 'flex') {
+                    stopTimer();
+                }
+            }
+            
+            function downloadAllFiles() {
+                const completedFiles = Array.from(fileManager.files.values()).filter(
+                    fileData => fileData.status === 'completed' && fileData.transcription
+                );
+                
+                if (completedFiles.length === 0) {
+                    activateTab(transcriptTabBtn, transcriptTab);
+                    transcriptPlaceholder.textContent = 'No completed transcriptions to download';
+                    setTimeout(() => {
+                        transcriptPlaceholder.textContent = 'Your transcription will appear here';
+                    }, 3000);
+                    return;
+                }
+                
+                // Download each file with a small delay to avoid browser blocking
+                completedFiles.forEach((fileData, index) => {
+                    setTimeout(() => {
+                        const filename = fileData.name.replace(/\.[^/.]+$/, '') + '.txt';
+                        downloadFile(filename, fileData.transcription, 'text/plain');
+                    }, index * 100); // 100ms delay between downloads
+                });
+            }
+            
+            // Event handlers for new buttons
+            clearQueueBtn.addEventListener('click', () => {
+                if (fileManager.files.size === 0) return;
+                
+                if (confirm('Are you sure you want to clear all files and transcriptions?')) {
+                    clearQueue();
+                }
+            });
+            
+            downloadAllBtn.addEventListener('click', downloadAllFiles);
+            
+            // Initialize clear button state
+            updateFilesCount();
+            
+            // Initialize button visibility (transcript tab is active by default)
+            updateButtonVisibility(transcriptTabBtn);
+            
+            function showStatus(message, type) {
+                statusEl.innerHTML = message;
+                statusEl.className = 'status';
+                statusEl.classList.add(type);
+                
+                if (type === 'success' || type === 'error') {
+                    setTimeout(() => {
+                        statusEl.style.display = 'none';
+                    }, 5000);
+                }
+            }
+            
+            // Copy to clipboard functionality
+            copyTextBtn.addEventListener('click', async () => {
+                const fileData = getCurrentFileData();
+                if (fileData && fileData.transcription) {
+                    try {
+                        // Get current text from editor
+                        const textToCopy = transcriptEditor.value;
+                        
+                        // Try modern clipboard API first
+                        if (navigator.clipboard && window.isSecureContext) {
+                            await navigator.clipboard.writeText(textToCopy);
+                        } else {
+                            // Fallback for older browsers
+                            const textArea = document.createElement('textarea');
+                            textArea.value = textToCopy;
+                            textArea.style.position = 'fixed';
+                            textArea.style.left = '-999999px';
+                            textArea.style.top = '-999999px';
+                            document.body.appendChild(textArea);
+                            textArea.focus();
+                            textArea.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(textArea);
+                        }
+                        
+                        // Visual feedback
+                        copyTextBtn.classList.add('copied');
+                        copyTextBtn.title = 'Copied!';
+                        
+                        setTimeout(() => {
+                            copyTextBtn.classList.remove('copied');
+                            copyTextBtn.title = 'Copy to Clipboard';
+                        }, 1500);
+                        
+                    } catch (err) {
+                        console.error('Failed to copy text: ', err);
+                        // Show error feedback
+                        copyTextBtn.style.backgroundColor = '#e74c3c';
+                        setTimeout(() => {
+                            copyTextBtn.style.backgroundColor = '';
+                        }, 1500);
+                    }
+                } else {
+                    activateTab(transcriptTabBtn, transcriptTab);
+                    transcriptPlaceholder.textContent = 'No transcription available to copy';
+                    setTimeout(() => {
+                        transcriptPlaceholder.textContent = 'Your transcription will appear here';
+                    }, 3000);
+                }
+            });
+            
+            // Download functionality
+            downloadTextBtn.addEventListener('click', () => {
+                const fileData = getCurrentFileData();
+                if (fileData && fileData.transcription) {
+                    // Always use text from editor
+                    const textToDownload = transcriptEditor.value;
+                    fileData.transcription = textToDownload; // Auto-save when downloading
+                    
+                    const filename = getCurrentFileName() + '.txt';
+                    downloadFile(filename, textToDownload, 'text/plain');
+                } else {
+                    activateTab(transcriptTabBtn, transcriptTab);
+                    transcriptPlaceholder.textContent = 'No transcription available to download';
+                    setTimeout(() => {
+                        transcriptPlaceholder.textContent = 'Your transcription will appear here';
+                    }, 3000);
+                }
+            });
+            
+            downloadJsonBtn.addEventListener('click', () => {
+                const fileData = getCurrentFileData();
+                if (fileData && fileData.json) {
+                    // Update JSON object with current editor content
+                    const editedJson = { ...fileData.json, text: transcriptEditor.value };
+                    fileData.json = editedJson; // Auto-save when downloading
+                    
+                    const filename = getCurrentFileName() + '.json';
+                    downloadFile(
+                        filename, 
+                        JSON.stringify(editedJson, null, 2), 
+                        'application/json'
+                    );
+                } else {
+                    activateTab(transcriptTabBtn, transcriptTab);
+                    transcriptPlaceholder.textContent = 'No JSON response available to download';
+                    setTimeout(() => {
+                        transcriptPlaceholder.textContent = 'Your transcription will appear here';
+                    }, 3000);
+                }
+            });
+            
+            function downloadFile(filename, content, contentType) {
+                const blob = new Blob([content], { type: contentType });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                
+                a.href = url;
+                a.download = filename;
+                a.style.display = 'none';
+                
+                document.body.appendChild(a);
+                a.click();
+                
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 100);
+            }
+        });
+    </script>
+</body>
+</html>

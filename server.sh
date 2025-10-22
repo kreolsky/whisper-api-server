@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Имя окружения conda
-CONDA_ENV_NAME="whisper-api-server"
+CONDA_ENV_NAME="whisper-api"
 
 # Флаг обновления (по умолчанию false)
 UPDATE_ENV=false
@@ -17,10 +17,14 @@ if ! command -v conda &> /dev/null; then
     exit 1
 fi
 
+# Флаг, указывающий, было ли создано новое окружение
+NEW_ENV_CREATED=false
+
 # Создание окружения conda, если оно не существует
 if ! conda env list | grep -q "$CONDA_ENV_NAME"; then
     echo "Создание окружения conda: $CONDA_ENV_NAME"
     conda create -n "$CONDA_ENV_NAME" python=3.12 -y
+    NEW_ENV_CREATED=true
 else
     echo "Окружение conda '$CONDA_ENV_NAME' уже существует."
 fi
@@ -39,8 +43,8 @@ echo "Активация окружения conda: $CONDA_ENV_NAME"
 source $(dirname "$CONDA_PATH")/../etc/profile.d/conda.sh
 conda activate "$CONDA_ENV_NAME"
 
-# Если флаг --update установлен, обновляем зависимости
-if [[ "$UPDATE_ENV" == true ]]; then
+# Установка зависимостей при первом создании окружения или при флаге --update
+if [[ "$NEW_ENV_CREATED" == true || "$UPDATE_ENV" == true ]]; then
     # Установка зависимостей из requirements.txt
     if [ -f "requirements.txt" ]; then
         echo "Установка зависимостей из requirements.txt"
