@@ -83,13 +83,22 @@ class WhisperTranscriber:
             Объект устройства PyTorch.
         """
         if torch.cuda.is_available():
-            # Проверяем, доступна ли GPU с индексом 1
-            if torch.cuda.device_count() > 1:
-                logger.info("Используется CUDA GPU с индексом 1 для вычислений")
-                return torch.device("cuda:1")
-            else:
-                logger.info("Доступна только одна CUDA GPU, используется GPU с индексом 0")
-                return torch.device("cuda:0")
+            # Получаем device_id из конфигурации, по умолчанию 0
+            device_id = self.config.get("device_id", 0)
+            
+            # Проверяем, что device_id является целым числом
+            if not isinstance(device_id, int):
+                logger.warning(f"device_id должен быть целым числом, получено: {device_id}. Используем значение по умолчанию 0")
+                device_id = 0
+            
+            # Проверяем, доступен ли запрошенный GPU
+            device_count = torch.cuda.device_count()
+            if device_id >= device_count:
+                logger.warning(f"Запрошенный GPU с индексом {device_id} недоступен. Доступно GPU: {device_count}. Используем GPU с индексом 0")
+                device_id = 0
+            
+            logger.info(f"Используется CUDA GPU с индексом {device_id} для вычислений")
+            return torch.device(f"cuda:{device_id}")
         elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             logger.info("Используется MPS (Apple Silicon) для вычислений")
             # Обходное решение для MPS
