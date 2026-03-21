@@ -25,7 +25,7 @@ class HistoryLogger:
         """
         self.config = config
         self.history_enabled = config.get("enable_history", False)
-        self.history_root = os.path.join(os.path.dirname(os.path.dirname(__file__)), "history")
+        self.history_root = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "history")
         
         # Создаем корневую директорию истории, если она не существует
         if self.history_enabled and not os.path.exists(self.history_root):

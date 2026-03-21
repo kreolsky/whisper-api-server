@@ -6,7 +6,9 @@
 import os
 import logging
 from flask import Flask
+from flask_cors import CORS
 from typing import Dict
+import waitress
 
 from .core.transcriber import WhisperTranscriber
 from .core.config import load_config
@@ -50,7 +52,8 @@ class WhisperServiceAPI:
         
         # Инициализация Flask приложения
         self.app = Flask(__name__)
-        self.port = self.config.get('port', 5000)
+        CORS(self.app)
+        self.port = self.config["service_port"]
         
         # Инициализация компонентов
         self.transcriber = WhisperTranscriber(self.config)
@@ -65,16 +68,10 @@ class WhisperServiceAPI:
         
         self.logger.info("WhisperServiceAPI успешно инициализирован")
 
-    def run(self, host: str = '0.0.0.0', debug: bool = False) -> None:
-        """
-        Запуск Flask приложения.
-        
-        Args:
-            host: Хост для запуска приложения.
-            debug: Флаг отладочного режима.
-        """
-        self.logger.info(f"Запуск сервиса на {host}:{self.port}")
-        self.app.run(host=host, port=self.port, debug=debug)
+    def run(self) -> None:
+        """Запуск сервиса через Waitress."""
+        self.logger.info(f"Запуск сервиса на 0.0.0.0:{self.port}")
+        waitress.serve(self.app, host='0.0.0.0', port=self.port)
 
     def create_app(self) -> Flask:
         """
