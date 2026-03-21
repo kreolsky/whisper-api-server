@@ -63,25 +63,7 @@ class WhisperServiceAPI:
         # Регистрация маршрутов
         routes = Routes(self.app, self.transcriber, self.config, self.file_validator)
         
-        # Регистрация обработчиков очистки
-        self._register_cleanup_handlers()
-        
         self.logger.info("WhisperServiceAPI успешно инициализирован")
-
-    def _register_cleanup_handlers(self) -> None:
-        """
-        Регистрация обработчиков для очистки ресурсов при завершении приложения.
-        """
-        @self.app.teardown_appcontext
-        def cleanup(error):
-            """
-            Очистка временных файлов при завершении контекста запроса.
-            
-            Args:
-                error: Ошибка, если она произошла.
-            """
-            # Выполнение очистки временных файлов, если необходимо
-            pass
 
     def run(self, host: str = '0.0.0.0', debug: bool = False) -> None:
         """

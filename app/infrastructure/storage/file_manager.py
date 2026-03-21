@@ -98,20 +98,6 @@ class TempFileManager:
             yield temp_file
         finally:
             self.cleanup_temp_files([temp_file])
-    
-    def cleanup_all(self) -> None:
-        """
-        Очищает все отслеживаемые временные файлы и директории.
-        """
-        self.cleanup_temp_files()
-        for temp_dir in self.temp_dirs:
-            try:
-                if os.path.exists(temp_dir) and not os.listdir(temp_dir):
-                    os.rmdir(temp_dir)
-                    logger.debug(f"Удалена временная директория: {temp_dir}")
-            except Exception as e:
-                logger.warning(f"Не удалось очистить временную директорию {temp_dir}: {e}")
-        self.temp_dirs.clear()
 
 
 # Глобальный экземпляр менеджера временных файлов

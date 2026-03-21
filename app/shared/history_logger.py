@@ -11,8 +11,6 @@ import string
 from typing import Dict, Any, Optional
 import logging
 
-import logging
-
 logger = logging.getLogger('app.history')
 
 class HistoryLogger:

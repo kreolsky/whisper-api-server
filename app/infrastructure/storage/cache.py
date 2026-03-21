@@ -3,8 +3,7 @@
 """
 
 import time
-from typing import Dict, Any, Optional, Callable
-from functools import wraps
+from typing import Dict, Any, Optional
 import logging
 
 logger = logging.getLogger('app.cache')
@@ -90,39 +89,5 @@ class SimpleCache:
         return False
 
 
-# Глобальные экземпляры кэша
+# Глобальный экземпляр кэша
 model_cache = SimpleCache(ttl=3600)  # Кэш для метаданных модели (1 час)
-config_cache = SimpleCache(ttl=300)   # Кэш для конфигурации (5 минут)
-
-
-def cache_result(cache_instance: SimpleCache, key_prefix: str = ""):
-    """
-    Декоратор для кэширования результатов функции.
-    
-    Args:
-        cache_instance: Экземпляр кэша.
-        key_prefix: Префикс для ключа кэша.
-        
-    Returns:
-        Декорированная функция.
-    """
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            # Генерация ключа кэша на основе имени функции и аргументов
-            cache_key = f"{key_prefix}{func.__name__}_{str(args)}_{str(kwargs)}"
-            
-            # Попытка получить результат из кэша
-            cached_result = cache_instance.get(cache_key)
-            if cached_result is not None:
-                return cached_result
-            
-            # Если результат не в кэше, вызываем функцию
-            result = func(*args, **kwargs)
-            
-            # Сохраняем результат в кэш
-            cache_instance.set(cache_key, result)
-            
-            return result
-        return wrapper
-    return decorator

@@ -4,8 +4,6 @@
 """
 
 import os
-import uuid
-import tempfile
 import time
 import traceback
 from typing import Dict, Tuple

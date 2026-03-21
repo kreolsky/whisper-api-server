@@ -12,7 +12,6 @@ from typing import Dict, Tuple
 import logging
 
 from ..infrastructure.storage.file_manager import temp_file_manager
-from ..shared.context_managers import open_file
 
 logger = logging.getLogger('app.audio_processor')
 

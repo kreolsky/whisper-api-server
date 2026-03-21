@@ -99,26 +99,6 @@ class AsyncTaskManager:
             Информация о задаче или None, если задача не найдена.
         """
         return self.tasks.get(task_id)
-    
-    def cleanup_completed_tasks(self, max_age_seconds: int = 3600) -> None:
-        """
-        Очистка завершенных задач старше указанного возраста.
-        
-        Args:
-            max_age_seconds: Максимальный возраст задачи в секундах.
-        """
-        current_time = time.time()
-        tasks_to_remove = []
-        
-        for task_id, task_info in self.tasks.items():
-            if (task_info["status"] in ["completed", "failed"] and 
-                "completed_at" in task_info and 
-                current_time - task_info["completed_at"] > max_age_seconds):
-                tasks_to_remove.append(task_id)
-        
-        for task_id in tasks_to_remove:
-            del self.tasks[task_id]
-            logger.debug(f"Задача {task_id} удалена из-за устаревания")
 
 
 # Глобальный экземпляр менеджера асинхронных задач

@@ -32,18 +32,3 @@ def open_file(file_path: str, mode: str = 'rb') -> Generator[BinaryIO, None, Non
     finally:
         if file_obj:
             file_obj.close()
-
-
-@contextlib.contextmanager
-def audio_file(file_path: str) -> Generator[BinaryIO, None, None]:
-    """
-    Контекстный менеджер для работы с аудиофайлами.
-    
-    Args:
-        file_path: Путь к аудиофайлу.
-        
-    Yields:
-        Файловый объект в бинарном режиме.
-    """
-    with open_file(file_path, 'rb') as f:
-        yield f

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /Users/serge/Develop/nnp-whisper-api-server log --oneline -10 --all)",
+      "Bash(git -C /Users/serge/Develop/nnp-whisper-api-server log --oneline main..cleanup/dead-code)"
+    ]
+  }
+}

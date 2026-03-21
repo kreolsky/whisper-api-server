@@ -184,12 +184,6 @@ class Routes:
             response, status_code = self.transcription_service.transcribe_from_source(source, params, self.file_validator)
             return jsonify(response), status_code
 
-        @self.app.route('/v1/audio/transcriptions/multipart', methods=['POST'])
-        @log_invalid_file_request
-        def transcribe_multipart():
-            """Эндпоинт для транскрибации аудиофайла, загруженного через форму."""
-            return _handle_transcription_request()
-        
         @self.app.route('/v1/audio/transcriptions/async', methods=['POST'])
         @log_invalid_file_request
         def transcribe_async():
