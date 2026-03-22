@@ -56,3 +56,9 @@ Non-negotiable. Violation = stop and fix before continuing.
 * New audio input methods: add a `get_*_file()` function in `sources.py` returning `(temp_path, filename, error)`.
 * File validation runs through `FileValidator` -- never validate inline in routes.
 * Configuration values accessed via `self.config.get()` with sensible defaults, except critical params which must crash if missing.
+
+## Deploy
+
+* Server: `ssh orange`, path `/home/text-generation/servers/whisper-api`
+* Обновление: `git push` → `ssh orange "cd /home/text-generation/servers/whisper-api && git pull"` → перезапуск сервиса через systemd (`whisper.service`)
+* Проверка: `ssh orange "curl -s http://localhost:5042/health"`
