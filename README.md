@@ -80,8 +80,7 @@ The service is configured through the `config.json` file:
     "return_timestamps": false,
     "audio_rate": 8000,
     "norm_level": "-0.55",
-    "compand_params": "0.3,1 -90,-90,-70,-50,-40,-15,0,0 -7 0 0.15",
-    "audio_speed_factor": 1.25
+    "compand_params": "0.3,1 -90,-90,-70,-50,-40,-15,0,0 -7 0 0.15"
 }
 ```
 
@@ -101,7 +100,6 @@ The service is configured through the `config.json` file:
 | `audio_rate` | Audio sampling rate in Hz |
 | `norm_level` | Normalization level for audio preprocessing |
 | `compand_params` | Parameters for audio compression/expansion |
-| `audio_speed_factor` | Audio speed factor for faster recognition (1.0 = no speedup, 1.25 = 25% faster) |
 
 ## Web interface
 

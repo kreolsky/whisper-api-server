@@ -12,11 +12,9 @@ import waitress
 
 from .core.transcriber import WhisperTranscriber
 from .core.config import load_config
-from .api.routes import Routes
-from .infrastructure.validation.validators import FileValidator
-from .infrastructure.storage.file_manager import temp_file_manager
-from .infrastructure.logging.config import setup_logging
-from .infrastructure.logging.request_logger import RequestLogger
+from .routes import Routes
+from .infrastructure.validation import FileValidator
+from .infrastructure.log import setup_logging, RequestLogger
 
 
 class WhisperServiceAPI:
@@ -60,7 +58,7 @@ class WhisperServiceAPI:
         self.file_validator = FileValidator(self.config)
         
         # Настройка логирования запросов
-        request_logger_config = self.config.get('request_logger', {})
+        request_logger_config = self.config.get('request_logging', {})
         request_logger = RequestLogger(self.app, request_logger_config)
         
         # Регистрация маршрутов

@@ -17,4 +17,3 @@ scipy==1.13.1
 transformers==4.49.0
 accelerate==1.4.0
 python-magic==0.4.27
-flask-limiter==3.5.0

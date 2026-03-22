@@ -149,6 +149,43 @@ class FileValidator:
             logger.warning(f"Не удалось определить MIME-тип файла: {e}")
             # Не прерываем валидацию, если не удалось определить MIME-тип
     
+    def validate_file_by_path(self, file_path: str, filename: str) -> bool:
+        """
+        Валидирует файл по пути на диске.
+
+        Args:
+            file_path: Путь к файлу.
+            filename: Имя файла (для проверки расширения).
+
+        Returns:
+            True, если файл прошел валидацию.
+
+        Raises:
+            ValidationError: Если файл не прошел валидацию.
+        """
+        # Проверка расширения
+        self._validate_file_extension(filename)
+
+        # Проверка размера
+        file_size = os.path.getsize(file_path)
+        max_size_bytes = self.max_file_size_mb * 1024 * 1024
+        if file_size > max_size_bytes:
+            raise ValidationError(f"Размер файла ({file_size / (1024*1024):.2f} МБ) "
+                                 f"превышает максимально допустимый ({self.max_file_size_mb} МБ)")
+
+        # Проверка MIME-типа
+        try:
+            mime_type = magic.from_file(file_path, mime=True)
+            if mime_type not in self.allowed_mime_types:
+                raise ValidationError(f"MIME-тип файла ({mime_type}) не разрешен. "
+                                     f"Разрешенные MIME-типы: {', '.join(self.allowed_mime_types)}")
+        except ValidationError:
+            raise
+        except Exception as e:
+            logger.warning(f"Не удалось определить MIME-тип файла: {e}")
+
+        return True
+
     @staticmethod
     def validate_local_file_path(file_path: str, allowed_directories: Optional[List[str]] = None) -> str:
         """

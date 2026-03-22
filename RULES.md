@@ -46,13 +46,13 @@ Non-negotiable. Violation = stop and fix before continuing.
 ## Audio Processing Rules
 
 * FFmpeg and SoX are external dependencies. Always check subprocess return codes.
-* Temp files must be created via `TempFileManager.temp_file()` context manager -- never raw `tempfile.mktemp`.
-* Audio pipeline order matters: convert to WAV 16kHz -> normalize -> compress/expand -> speedup -> add silence.
+* Temp files must be created via `create_temp_file()` from `app/infrastructure/storage.py` -- never raw `tempfile.mktemp`.
+* Audio pipeline order matters: convert to WAV 16kHz -> normalize -> compress/expand -> add silence.
 
 ## Flask / API Rules
 
-* New endpoints go in `app/api/routes.py` inside `_register_routes()`.
-* All transcription endpoints delegate to `TranscriptionService.transcribe_from_source()`.
-* New audio input methods: subclass `AudioSource`, implement `get_audio_file()`.
+* New endpoints go in `app/routes.py` inside `_register_routes()`.
+* All transcription endpoints delegate to `TranscriptionService.transcribe()`.
+* New audio input methods: add a `get_*_file()` function in `sources.py` returning `(temp_path, filename, error)`.
 * File validation runs through `FileValidator` -- never validate inline in routes.
 * Configuration values accessed via `self.config.get()` with sensible defaults, except critical params which must crash if missing.

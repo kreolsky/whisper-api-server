@@ -7,11 +7,10 @@
 
 import os
 import subprocess
-import uuid
 from typing import Dict, Tuple
 import logging
 
-from ..infrastructure.storage.file_manager import temp_file_manager
+from ..infrastructure.storage import create_temp_file, cleanup_temp_files
 
 logger = logging.getLogger('app.audio_processor')
 
@@ -36,8 +35,7 @@ class AudioProcessor:
         self.config = config
         self.norm_level = config.get("norm_level", "-0.5")
         self.compand_params = config.get("compand_params", "0.3,1 -90,-90,-70,-70,-60,-20,0,0 -5 0 0.2")
-        self.audio_speed_factor = config.get("audio_speed_factor", 1.25)
-    
+
     def convert_to_wav(self, input_path: str) -> str:
         """
         Конвертация входного аудиофайла в WAV формат с частотой дискретизации 16 кГц.
@@ -66,7 +64,7 @@ class AudioProcessor:
                 # Продолжаем конвертацию, чтобы быть уверенными в формате
 
         # Создаем временный файл для WAV
-        output_path, _ = temp_file_manager.create_temp_file(".wav")
+        output_path = create_temp_file(".wav")
         
         # Команда для конвертации
         cmd = [
@@ -103,7 +101,7 @@ class AudioProcessor:
             subprocess.CalledProcessError: Если произошла ошибка при нормализации.
         """
         # Создаем временный файл для нормализованного аудио
-        output_path, _ = temp_file_manager.create_temp_file("_normalized.wav")
+        output_path = create_temp_file("_normalized.wav")
         
         # Команда для нормализации аудио с помощью sox
         cmd = [
@@ -124,47 +122,6 @@ class AudioProcessor:
             logger.error(f"Ошибка при нормализации аудио: {e.stderr.decode()}")
             raise
     
-    def speed_up_audio(self, input_path: str) -> str:
-        """
-        Ускоряет воспроизведение аудиофайла с использованием FFmpeg.
-        
-        Args:
-            input_path: Путь к WAV-файлу.
-            
-        Returns:
-            Путь к ускоренному WAV-файлу.
-            
-        Raises:
-            subprocess.CalledProcessError: Если произошла ошибка при ускорении.
-        """
-        # Если ускорение не требуется (коэффициент = 1.0), возвращаем исходный файл
-        if float(self.audio_speed_factor) == 1.0:
-            logger.info(f"Ускорение не требуется (коэффициент = {self.audio_speed_factor})")
-            return input_path
-        
-        # Создаем временный файл для ускоренного аудио
-        output_path, _ = temp_file_manager.create_temp_file("_speedup.wav")
-        
-        # Команда для ускорения аудио с помощью FFmpeg
-        cmd = [
-            "ffmpeg",
-            "-hide_banner",
-            "-loglevel", "warning",
-            "-i", input_path,
-            "-filter:a", f"atempo={self.audio_speed_factor}",
-            output_path
-        ]
-        
-        logger.info(f"Ускорение аудио в {self.audio_speed_factor}x: {' '.join(cmd)}")
-        
-        try:
-            subprocess.run(cmd, check=True, capture_output=True)
-            logger.info(f"Аудио ускорено: {output_path}")
-            return output_path
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Ошибка при ускорении аудио: {e.stderr.decode()}")
-            raise
-    
     def add_silence(self, input_path: str) -> str:
         """
         Добавляет тишину в начало аудиофайла.
@@ -179,7 +136,7 @@ class AudioProcessor:
             subprocess.CalledProcessError: Если произошла ошибка при добавлении тишины.
         """
         # Создаем временный файл
-        output_path, _ = temp_file_manager.create_temp_file("_silence.wav")
+        output_path = create_temp_file("_silence.wav")
         
         # Команда для добавления тишины в начало файла
         cmd = [
@@ -223,19 +180,14 @@ class AudioProcessor:
             # Нормализация
             normalized_path = self.normalize_audio(wav_path)
             temp_files.append(normalized_path)
-            
-            # УСКОРЕНИЕ ЗВУКА (НОВЫЙ ШАГ)
-            speedup_path = self.speed_up_audio(normalized_path)
-            if speedup_path != normalized_path:  # Если был создан временный файл
-                temp_files.append(speedup_path)
-            
+
             # Добавление тишины
-            silence_path = self.add_silence(speedup_path)
+            silence_path = self.add_silence(normalized_path)
             temp_files.append(silence_path)
             
             return silence_path, temp_files
         
         except Exception as e:
             logger.error(f"Ошибка при обработке аудио {input_path}: {e}")
-            temp_file_manager.cleanup_temp_files(temp_files)
+            cleanup_temp_files(temp_files)
             raise

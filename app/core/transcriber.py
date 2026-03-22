@@ -20,8 +20,8 @@ from transformers import (
 )
 
 from ..audio.processor import AudioProcessor
-from ..audio.utils import AudioUtils
-from ..infrastructure.storage.file_manager import temp_file_manager
+from ..audio.utils import load_audio
+from ..infrastructure.storage import cleanup_temp_files
 
 logger = logging.getLogger('app.transcriber')
 
@@ -177,7 +177,7 @@ class WhisperTranscriber:
         
         try:
             # Загрузка аудио в формате numpy array
-            audio_array, sampling_rate = AudioUtils.load_audio(audio_path, sr=16000)
+            audio_array, sampling_rate = load_audio(audio_path, sr=16000)
             
             # Транскрибация с корректным форматом данных
             result = self.asr_pipeline(
@@ -279,4 +279,4 @@ class WhisperTranscriber:
             
         finally:
             # Очистка временных файлов
-            temp_file_manager.cleanup_temp_files(temp_files)
+            cleanup_temp_files(temp_files)

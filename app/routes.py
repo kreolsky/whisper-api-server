@@ -8,54 +8,26 @@ from flask import request, jsonify
 from typing import Dict
 import logging
 
-from ..core.transcription_service import TranscriptionService
-from ..audio.sources import (
-    UploadedFileSource,
-    URLSource,
-    Base64Source,
-    LocalFileSource
-)
-from ..infrastructure.validation.validators import ValidationError
-from ..infrastructure.async_tasks.manager import transcribe_audio_async, task_manager
-from ..infrastructure.storage.cache import model_cache
-from ..shared.decorators import log_invalid_file_request
+from .core.transcription_service import TranscriptionService
+from .audio.sources import get_uploaded_file, get_url_file, get_base64_file, get_local_file
+from .infrastructure.validation import ValidationError
+from .infrastructure.async_tasks import transcribe_audio_async, task_manager
 
 logger = logging.getLogger('app.routes')
 
 
 class Routes:
-    """
-    Класс для регистрации всех эндпоинтов API.
-    
-    Attributes:
-        app (Flask): Flask-приложение.
-        config (Dict): Словарь с конфигурацией.
-        transcription_service (TranscriptionService): Сервис транскрибации.
-        file_validator (FileValidator): Валидатор файлов.
-    """
+    """Класс для регистрации всех эндпоинтов API."""
 
     def __init__(self, app, transcriber, config: Dict, file_validator):
-        """
-        Инициализация маршрутов.
-
-        Args:
-            app: Flask-приложение.
-            transcriber: Экземпляр транскрайбера.
-            config: Словарь с конфигурацией.
-            file_validator: Валидатор файлов.
-        """
         self.app = app
         self.config = config
         self.transcription_service = TranscriptionService(transcriber, config)
         self.file_validator = file_validator
-
-        # Регистрация маршрутов
+        self._max_size = self.config.get("file_validation", {}).get("max_file_size_mb", 100)
         self._register_routes()
 
     def _register_routes(self) -> None:
-        """
-        Регистрация всех эндпоинтов.
-        """
         @self.app.route('/', methods=['GET'])
         def index():
             """Корень. Отдаёт HTML клиент."""
@@ -64,10 +36,7 @@ class Routes:
         @self.app.route('/health', methods=['GET'])
         def health_check():
             """Эндпоинт для проверки статуса сервиса."""
-            return jsonify({
-                "status": "ok",
-                "version": self.config.get("version", "1.0.0")
-            }), 200
+            return jsonify({"status": "ok", "version": "1.0.0"}), 200
 
         @self.app.route('/config', methods=['GET'])
         def get_config():
@@ -83,36 +52,34 @@ class Routes:
                 return jsonify({"error": "No file_path provided"}), 400
 
             file_path = data["file_path"]
-            
-            # Валидация пути к файлу
+
             try:
                 validated_path = self.file_validator.validate_local_file_path(
-                    file_path, 
+                    file_path,
                     allowed_directories=self.config.get("allowed_directories", [])
                 )
             except ValidationError as e:
-                # Логирование обращения к API с невалидным путем к файлу
                 client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('REMOTE_ADDR', 'unknown'))
-                logger.warning(f"Обращение к эндпоинту /local/transcriptions с невалидным путем к файлу '{file_path}' "
-                              f"от клиента {client_ip}. Ошибка: {str(e)}")
+                logger.warning(f"Невалидный путь '{file_path}' от {client_ip}: {e}")
                 return jsonify({"error": str(e)}), 400
-            
-            source = LocalFileSource(validated_path, self.config.get("file_validation", {}).get("max_file_size_mb", 100))
-            response, status_code = self.transcription_service.transcribe_from_source(source, data)
+
+            temp_path, filename, error = get_local_file(validated_path, self._max_size)
+            if error:
+                return jsonify({"error": error}), 400
+
+            response, status_code = self.transcription_service.transcribe(temp_path, filename, data)
             return jsonify(response), status_code
 
         @self.app.route('/v1/models', methods=['GET'])
         def list_models():
             """Эндпоинт для получения списка доступных моделей."""
             return jsonify({
-                "data": [
-                    {
-                        "id": os.path.basename(self.config["model_path"]),
-                        "object": "model",
-                        "owned_by": "openai",
-                        "permissions": []
-                    }
-                ],
+                "data": [{
+                    "id": os.path.basename(self.config["model_path"]),
+                    "object": "model",
+                    "owned_by": "openai",
+                    "permissions": []
+                }],
                 "object": "list"
             }), 200
 
@@ -126,26 +93,29 @@ class Routes:
                     "owned_by": "openai",
                     "permissions": []
                 }), 200
-            else:
-                return jsonify({
-                    "error": "Model not found",
-                    "details": f"Model '{model_id}' does not exist"
-                }), 404
-
-        def _handle_transcription_request():
-            """Общая функция для обработки запросов транскрибации."""
-            source = UploadedFileSource(request.files, self.config.get("file_validation", {}).get("max_file_size_mb", 100))
-            response, status_code = self.transcription_service.transcribe_from_source(source, request.form, self.file_validator)
-            return jsonify(response), status_code
+            return jsonify({
+                "error": "Model not found",
+                "details": f"Model '{model_id}' does not exist"
+            }), 404
 
         @self.app.route('/v1/audio/transcriptions', methods=['POST'])
-        @log_invalid_file_request
         def openai_transcribe_endpoint():
             """Эндпоинт для транскрибации аудиофайла (multipart-форма)."""
-            return _handle_transcription_request()
+            temp_path, filename, error = get_uploaded_file(request.files, self._max_size)
+            if error:
+                return jsonify({"error": error}), 400
+
+            # Валидация файла
+            try:
+                self.file_validator.validate_file_by_path(temp_path, filename)
+            except ValidationError as e:
+                logger.warning(f"Ошибка валидации файла '{filename}': {e}")
+                return jsonify({"error": str(e)}), 400
+
+            response, status_code = self.transcription_service.transcribe(temp_path, filename, dict(request.form))
+            return jsonify(response), status_code
 
         @self.app.route('/v1/audio/transcriptions/url', methods=['POST'])
-        @log_invalid_file_request
         def transcribe_from_url():
             """Эндпоинт для транскрибации аудиофайла по URL."""
             data = request.json
@@ -157,15 +127,22 @@ class Routes:
                 }), 400
 
             url = data["url"]
-            # Извлекаем параметры транскрибации, если они есть
             params = {k: v for k, v in data.items() if k != "url"}
 
-            source = URLSource(url, self.config.get("file_validation", {}).get("max_file_size_mb", 100))
-            response, status_code = self.transcription_service.transcribe_from_source(source, params, self.file_validator)
+            temp_path, filename, error = get_url_file(url, self._max_size)
+            if error:
+                return jsonify({"error": error}), 400
+
+            try:
+                self.file_validator.validate_file_by_path(temp_path, filename)
+            except ValidationError as e:
+                logger.warning(f"Ошибка валидации файла '{filename}': {e}")
+                return jsonify({"error": str(e)}), 400
+
+            response, status_code = self.transcription_service.transcribe(temp_path, filename, params)
             return jsonify(response), status_code
 
         @self.app.route('/v1/audio/transcriptions/base64', methods=['POST'])
-        @log_invalid_file_request
         def transcribe_from_base64():
             """Эндпоинт для транскрибации аудио, закодированного в base64."""
             data = request.json
@@ -177,60 +154,49 @@ class Routes:
                 }), 400
 
             base64_data = data["file"]
-            # Извлекаем параметры транскрибации, если они есть
             params = {k: v for k, v in data.items() if k != "file"}
 
-            source = Base64Source(base64_data, self.config.get("file_validation", {}).get("max_file_size_mb", 100))
-            response, status_code = self.transcription_service.transcribe_from_source(source, params, self.file_validator)
+            temp_path, filename, error = get_base64_file(base64_data, self._max_size)
+            if error:
+                return jsonify({"error": error}), 400
+
+            try:
+                self.file_validator.validate_file_by_path(temp_path, filename)
+            except ValidationError as e:
+                logger.warning(f"Ошибка валидации файла '{filename}': {e}")
+                return jsonify({"error": str(e)}), 400
+
+            response, status_code = self.transcription_service.transcribe(temp_path, filename, params)
             return jsonify(response), status_code
 
         @self.app.route('/v1/audio/transcriptions/async', methods=['POST'])
-        @log_invalid_file_request
         def transcribe_async():
             """Эндпоинт для асинхронной транскрибации аудиофайла."""
-            source = UploadedFileSource(request.files, self.config.get("file_validation", {}).get("max_file_size_mb", 100))
-            
-            # Получаем файл
-            file, filename, error = source.get_audio_file()
-            
+            temp_path, filename, error = get_uploaded_file(request.files, self._max_size)
             if error:
                 return jsonify({"error": error}), 400
-            
-            if not file:
-                return jsonify({"error": "Failed to get audio file"}), 400
-            
-            # Валидация файла
+
             try:
-                self.file_validator.validate_file(file, filename)
+                self.file_validator.validate_file_by_path(temp_path, filename)
             except ValidationError as e:
                 return jsonify({"error": str(e)}), 400
-            
-            # Сохраняем файл во временный файл
-            from ..infrastructure.storage.file_manager import temp_file_manager
-            with temp_file_manager.temp_file() as temp_path:
-                file.save(temp_path)
-                
-                # Запускаем асинхронную транскрибацию
-                task_id = transcribe_audio_async(temp_path, self.transcription_service.transcriber)
-                
-                return jsonify({"task_id": task_id}), 202
-        
+
+            task_id = transcribe_audio_async(temp_path, self.transcription_service.transcriber)
+            return jsonify({"task_id": task_id}), 202
+
         @self.app.route('/v1/tasks/<task_id>', methods=['GET'])
         def get_task_status(task_id):
             """Эндпоинт для получения статуса асинхронной задачи."""
             task_info = task_manager.get_task_status(task_id)
-            
+
             if not task_info:
                 return jsonify({"error": "Task not found"}), 404
-            
-            response = {
-                "task_id": task_id,
-                "status": task_info["status"]
-            }
-            
+
+            response = {"task_id": task_id, "status": task_info["status"]}
+
             if task_info["status"] == "completed":
                 response["result"] = task_info["result"]
             elif task_info["status"] == "failed":
                 response["error"] = task_info["error"]
-            
+
             return jsonify(response)
