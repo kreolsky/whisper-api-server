@@ -1,11 +1,11 @@
 """
-Модуль manager.py содержит функции для асинхронной обработки задач.
+Модуль async_tasks.py содержит функции для асинхронной обработки задач.
 """
 
 import uuid
 import time
 from typing import Dict, Any, Callable, Optional
-from threading import Thread
+from threading import Thread, Lock
 import logging
 
 logger = logging.getLogger('app.async_tasks')
@@ -19,10 +19,13 @@ class AsyncTaskManager:
         tasks (Dict): Словарь для хранения информации о задачах.
     """
     
+    TASK_TTL = 3600  # 1 час
+
     def __init__(self):
         """
         Инициализация менеджера асинхронных задач.
         """
+        self._lock = Lock()
         self.tasks: Dict[str, Dict[str, Any]] = {}
     
     def run_task(self, func: Callable, *args, **kwargs) -> str:
@@ -38,23 +41,33 @@ class AsyncTaskManager:
             ID задачи.
         """
         task_id = str(uuid.uuid4())
-        
-        # Создание информации о задаче
-        self.tasks[task_id] = {
-            "status": "pending",
-            "result": None,
-            "error": None,
-            "created_at": time.time(),
-            "started_at": None,
-            "completed_at": None
-        }
-        
-        # Создание и запуск потока
+
+        with self._lock:
+            self._cleanup_old_tasks()
+            self.tasks[task_id] = {
+                "status": "pending",
+                "result": None,
+                "error": None,
+                "created_at": time.time(),
+                "started_at": None,
+                "completed_at": None
+            }
+
         thread = Thread(target=self._run_task_thread, args=(task_id, func, args, kwargs))
         thread.daemon = True
         thread.start()
-        
+
         return task_id
+
+    def _cleanup_old_tasks(self) -> None:
+        """Удаляет завершённые задачи старше TASK_TTL. Вызывать под self._lock."""
+        now = time.time()
+        expired = [
+            tid for tid, info in self.tasks.items()
+            if info["completed_at"] and now - info["completed_at"] > self.TASK_TTL
+        ]
+        for tid in expired:
+            del self.tasks[tid]
     
     def _run_task_thread(self, task_id: str, func: Callable, args: tuple, kwargs: dict) -> None:
         """
@@ -66,26 +79,25 @@ class AsyncTaskManager:
             args: Позиционные аргументы для функции.
             kwargs: Именованные аргументы для функции.
         """
-        try:
-            # Обновление статуса задачи
+        with self._lock:
             self.tasks[task_id]["status"] = "running"
             self.tasks[task_id]["started_at"] = time.time()
-            
-            # Выполнение функции
+
+        try:
             result = func(*args, **kwargs)
-            
-            # Сохранение результата
-            self.tasks[task_id]["status"] = "completed"
-            self.tasks[task_id]["result"] = result
-            self.tasks[task_id]["completed_at"] = time.time()
-            
+
+            with self._lock:
+                self.tasks[task_id]["status"] = "completed"
+                self.tasks[task_id]["result"] = result
+                self.tasks[task_id]["completed_at"] = time.time()
+
             logger.info(f"Задача {task_id} завершена успешно")
         except Exception as e:
-            # Обработка ошибки
-            self.tasks[task_id]["status"] = "failed"
-            self.tasks[task_id]["error"] = str(e)
-            self.tasks[task_id]["completed_at"] = time.time()
-            
+            with self._lock:
+                self.tasks[task_id]["status"] = "failed"
+                self.tasks[task_id]["error"] = str(e)
+                self.tasks[task_id]["completed_at"] = time.time()
+
             logger.error(f"Задача {task_id} завершилась с ошибкой: {e}")
     
     def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
@@ -98,7 +110,9 @@ class AsyncTaskManager:
         Returns:
             Информация о задаче или None, если задача не найдена.
         """
-        return self.tasks.get(task_id)
+        with self._lock:
+            task = self.tasks.get(task_id)
+            return dict(task) if task else None
 
 
 # Глобальный экземпляр менеджера асинхронных задач

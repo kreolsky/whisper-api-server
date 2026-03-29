@@ -117,32 +117,25 @@ class WhisperTranscriber:
         """
         logger.info(f"Загрузка модели из {self.model_path}")
 
+        model_kwargs = dict(
+            torch_dtype=self.torch_dtype,
+            low_cpu_mem_usage=True,
+            use_safetensors=True,
+        )
+
         try:
-            # Проверка возможности использования Flash Attention 2
             if self.device.type == "cuda":
-                self.model = WhisperForConditionalGeneration.from_pretrained(
-                    self.model_path,
-                    torch_dtype=self.torch_dtype,
-                    low_cpu_mem_usage=True,
-                    use_safetensors=True,
-                    attn_implementation="flash_attention_2"
-                ).to(self.device)
+                model_kwargs["attn_implementation"] = "flash_attention_2"
+            self.model = WhisperForConditionalGeneration.from_pretrained(
+                self.model_path, **model_kwargs
+            ).to(self.device)
+            if self.device.type == "cuda":
                 logger.info("Используется Flash Attention 2")
-            else:
-                self.model = WhisperForConditionalGeneration.from_pretrained(
-                    self.model_path,
-                    torch_dtype=self.torch_dtype,
-                    low_cpu_mem_usage=True,
-                    use_safetensors=True
-                ).to(self.device)
         except Exception as e:
             logger.warning(f"Не удалось загрузить модель с Flash Attention: {e}")
-            # Fallback к обычной версии
+            model_kwargs.pop("attn_implementation", None)
             self.model = WhisperForConditionalGeneration.from_pretrained(
-                self.model_path,
-                torch_dtype=self.torch_dtype,
-                low_cpu_mem_usage=True,
-                use_safetensors=True
+                self.model_path, **model_kwargs
             ).to(self.device)
 
         self.processor = WhisperProcessor.from_pretrained(self.model_path)
@@ -161,37 +154,41 @@ class WhisperTranscriber:
 
         logger.info("Модель успешно загружена и готова к использованию")
 
-    def transcribe(self, audio_path: str) -> Union[str, Dict]:
+    def transcribe(self, audio_path: str, return_timestamps: bool = None) -> Union[str, Dict]:
         """
         Транскрибация аудиофайла.
-        
+
         Args:
             audio_path: Путь к обработанному аудиофайлу.
+            return_timestamps: Флаг возврата временных меток. Если None — берётся из конфига.
 
         Returns:
             В зависимости от параметра return_timestamps:
             - Если return_timestamps=False: строка с распознанным текстом
             - Если return_timestamps=True: словарь с ключами "segments" (список словарей с ключами start_time_ms, end_time_ms, text) и "text" (полный текст)
         """
+        if return_timestamps is None:
+            return_timestamps = self.return_timestamps
+
         logger.info(f"Начало транскрибации файла: {audio_path}")
-        
+
         try:
             # Загрузка аудио в формате numpy array
             audio_array, sampling_rate = load_audio(audio_path, sr=16000)
-            
+
             # Транскрибация с корректным форматом данных
             result = self.asr_pipeline(
-                {"raw": audio_array, "sampling_rate": sampling_rate}, 
+                {"raw": audio_array, "sampling_rate": sampling_rate},
                 generate_kwargs={
-                    "language": self.language, 
-                    "max_new_tokens": self.max_new_tokens, 
+                    "language": self.language,
+                    "max_new_tokens": self.max_new_tokens,
                     "temperature": self.temperature
                 },
-                return_timestamps=self.return_timestamps
+                return_timestamps=return_timestamps
             )
             
             # Если временные метки не запрошены, возвращаем только текст
-            if not self.return_timestamps:
+            if not return_timestamps:
                 transcribed_text = result.get("text", "")
                 logger.info(f"Транскрибация завершена: получено {len(transcribed_text)} символов текста")
                 return transcribed_text
@@ -241,13 +238,14 @@ class WhisperTranscriber:
             logger.error(f"Traceback: {traceback.format_exc()}")
             raise
 
-    def process_file(self, input_path: str) -> Union[str, Dict]:
+    def process_file(self, input_path: str, return_timestamps: bool = None) -> Union[str, Dict]:
         """
         Полный процесс обработки и транскрибации аудиофайла.
-        
+
         Args:
             input_path: Путь к исходному аудиофайлу.
-            
+            return_timestamps: Флаг возврата временных меток. Если None — берётся из конфига.
+
         Returns:
             В зависимости от параметра return_timestamps:
             - Если return_timestamps=False: строка с распознанным текстом
@@ -263,7 +261,7 @@ class WhisperTranscriber:
             processed_path, temp_files = self.audio_processor.process_audio(input_path)
             
             # Транскрибация
-            result = self.transcribe(processed_path)
+            result = self.transcribe(processed_path, return_timestamps=return_timestamps)
             
             elapsed_time = time.time() - start_time
             logger.info(f"Обработка и транскрибация завершены за {elapsed_time:.2f} секунд")

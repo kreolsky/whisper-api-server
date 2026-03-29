@@ -3,6 +3,7 @@
 который отвечает за транскрибацию аудиофайлов.
 """
 
+import json
 import os
 import time
 import traceback
@@ -36,17 +37,13 @@ class TranscriptionService:
         """
         params = params or {}
         language = params.get('language', self.config.get('language', 'en'))
-        temperature = float(params.get('temperature', 0.0))
+        temperature = max(0.0, min(1.0, float(params.get('temperature', 0.0))))
         prompt = params.get('prompt', '')
 
         # Проверяем, запрошены ли временные метки
         return_timestamps = params.get('return_timestamps', self.config.get('return_timestamps', False))
         if isinstance(return_timestamps, str):
             return_timestamps = return_timestamps.lower() in ('true', 't', 'yes', 'y', '1')
-
-        # Временно изменяем настройку return_timestamps в транскрайбере
-        original_return_timestamps = self.transcriber.return_timestamps
-        self.transcriber.return_timestamps = return_timestamps
 
         try:
             # Определяем длительность аудиофайла
@@ -57,7 +54,7 @@ class TranscriptionService:
                 return {"error": f"Не удалось определить длительность аудиофайла: {e}"}, 500
 
             start_time = time.time()
-            result = self.transcriber.process_file(file_path)
+            result = self.transcriber.process_file(file_path, return_timestamps=return_timestamps)
             processing_time = time.time() - start_time
 
             # Формируем ответ
@@ -66,7 +63,7 @@ class TranscriptionService:
                     "segments": result.get("segments", []),
                     "text": result.get("text", ""),
                     "processing_time": processing_time,
-                    "response_size_bytes": len(str(result).encode('utf-8')),
+                    "response_size_bytes": len(json.dumps(result, ensure_ascii=False).encode('utf-8')),
                     "duration_seconds": duration,
                     "model": os.path.basename(self.config["model_path"])
                 }
@@ -74,7 +71,7 @@ class TranscriptionService:
                 response = {
                     "text": result,
                     "processing_time": processing_time,
-                    "response_size_bytes": len(str(result).encode('utf-8')),
+                    "response_size_bytes": len(json.dumps(result, ensure_ascii=False).encode('utf-8')),
                     "duration_seconds": duration,
                     "model": os.path.basename(self.config["model_path"])
                 }
@@ -86,6 +83,3 @@ class TranscriptionService:
             logger.error(f"Ошибка при транскрибации файла '{filename}': {str(e)}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             return {"error": str(e)}, 500
-
-        finally:
-            self.transcriber.return_timestamps = original_return_timestamps

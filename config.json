@@ -8,7 +8,7 @@
     "max_new_tokens": 384,
     "temperature": 0.01,
     "return_timestamps": false,
-    "audio_rate": 8000,
+    "audio_rate": 16000,
     "norm_level": "-0.55",
     "compand_params": "0.3,1 -90,-90,-70,-50,-40,-15,0,0 -7 0 0.15",
     "device_id": 0,
@@ -17,7 +17,6 @@
         "allowed_extensions": [".wav", ".mp3", ".ogg", ".flac", ".m4a", ".oga", ".aac", ".webm"],
         "allowed_mime_types": ["audio/wav", "audio/mpeg", "audio/ogg", "audio/flac", "audio/mp4", "audio/x-m4a", "audio/aac", "audio/webm"]
     },
-    "allowed_directories": [],
     "log_level": "INFO",
     "log_file": "logs/whisper_api.log",
     "request_logging": {

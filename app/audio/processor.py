@@ -77,7 +77,7 @@ class AudioProcessor:
             output_path
         ]
         
-        logger.info(f"Конвертация в WAV: {' '.join(cmd)}")
+        logger.debug(f"Конвертация в WAV: {' '.join(cmd)}")
         
         try:
             subprocess.run(cmd, check=True, capture_output=True)

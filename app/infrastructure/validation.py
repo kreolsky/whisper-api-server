@@ -1,10 +1,10 @@
 """
-Модуль validators.py содержит классы и функции для валидации входных данных.
+Модуль validation.py содержит классы и функции для валидации входных данных.
 """
 
 import os
 import magic
-from typing import Dict, List, BinaryIO, Optional
+from typing import Dict, List, BinaryIO
 import logging
 
 # Получаем логгер из централизованной настройки
@@ -186,35 +186,3 @@ class FileValidator:
 
         return True
 
-    @staticmethod
-    def validate_local_file_path(file_path: str, allowed_directories: Optional[List[str]] = None) -> str:
-        """
-        Валидирует путь к локальному файлу для предотвращения атак обхода пути.
-        
-        Args:
-            file_path: Путь к файлу.
-            allowed_directories: Список разрешенных директорий.
-            
-        Returns:
-            Нормализованный и проверенный путь к файлу.
-            
-        Raises:
-            ValidationError: Если путь к файлу небезопасен.
-        """
-        # Нормализация пути
-        normalized_path = os.path.normpath(file_path)
-        
-        # Если указаны разрешенные директории, проверяем, что путь находится в одной из них
-        if allowed_directories:
-            for allowed_dir in allowed_directories:
-                full_allowed_path = os.path.abspath(allowed_dir)
-                full_file_path = os.path.abspath(os.path.join(full_allowed_path, normalized_path))
-                
-                if full_file_path.startswith(full_allowed_path):
-                    return full_file_path
-            
-            logger.warning(f"Попытка доступа к файлу вне разрешенных директорий: {file_path}")
-            raise ValidationError("Путь к файлу не находится в разрешенных директориях")
-        
-        # Если разрешенные директории не указаны, просто возвращаем нормализованный путь
-        return normalized_path

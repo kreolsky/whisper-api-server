@@ -6,6 +6,7 @@ import os
 import subprocess
 import wave
 import numpy as np
+from scipy.signal import resample as scipy_resample
 import logging
 from typing import Tuple
 
@@ -33,9 +34,8 @@ def load_audio(file_path: str, sr: int = 16000) -> Tuple[np.ndarray, int]:
             sampling_rate = wav_file.getframerate()
 
             if sampling_rate != sr:
-                from scipy.signal import resample
                 num_samples = int(len(audio_array) * sr / sampling_rate)
-                audio_array = resample(audio_array, num_samples)
+                audio_array = scipy_resample(audio_array, num_samples)
                 sampling_rate = sr
 
             return audio_array, sampling_rate

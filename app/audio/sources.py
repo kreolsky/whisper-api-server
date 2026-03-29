@@ -1,12 +1,14 @@
 """
 Модуль sources.py содержит функции для получения аудиофайлов
-из различных источников (загруженные файлы, URL, base64, локальные файлы).
+из различных источников (загруженные файлы, URL, base64).
 """
 
 import os
 import uuid
 import tempfile
 import base64
+from urllib.parse import urlparse
+import magic
 import requests
 from typing import Tuple, Optional
 import logging
@@ -66,7 +68,11 @@ def get_url_file(url: str, max_file_size_mb: int = 100) -> Tuple[Optional[str], 
         Кортеж (путь к temp-файлу, имя файла, сообщение об ошибке).
     """
     try:
-        response = requests.get(url, stream=True)
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https'):
+            return None, None, f"Unsupported URL scheme: {parsed.scheme}. Only http/https allowed"
+
+        response = requests.get(url, stream=True, timeout=30)
         response.raise_for_status()
 
         # Проверка размера по Content-Length
@@ -76,12 +82,22 @@ def get_url_file(url: str, max_file_size_mb: int = 100) -> Tuple[Optional[str], 
             if error:
                 return None, None, error
 
+        # Извлекаем имя файла из Content-Disposition или URL
+        original_name = None
+        cd = response.headers.get('Content-Disposition', '')
+        if 'filename=' in cd:
+            original_name = cd.split('filename=')[-1].strip('" ')
+        if not original_name:
+            url_path = parsed.path.rstrip('/')
+            if url_path:
+                original_name = os.path.basename(url_path)
+
         temp_path = _make_temp_path()
         with open(temp_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
 
-        return temp_path, os.path.basename(temp_path), None
+        return temp_path, original_name or os.path.basename(temp_path), None
 
     except Exception as e:
         logger.error(f"Ошибка при получении файла по URL {url}: {e}")
@@ -102,7 +118,20 @@ def get_base64_file(base64_data: str, max_file_size_mb: int = 100) -> Tuple[Opti
         if error:
             return None, None, error
 
-        temp_path = _make_temp_path()
+        # Определяем формат по содержимому
+        mime_to_ext = {
+            "audio/mpeg": ".mp3",
+            "audio/ogg": ".ogg",
+            "audio/flac": ".flac",
+            "audio/mp4": ".m4a",
+            "audio/x-m4a": ".m4a",
+            "audio/aac": ".aac",
+            "audio/webm": ".webm",
+        }
+        detected_mime = magic.from_buffer(audio_data[:1024], mime=True)
+        suffix = mime_to_ext.get(detected_mime, ".wav")
+
+        temp_path = _make_temp_path(suffix)
         with open(temp_path, 'wb') as f:
             f.write(audio_data)
 
@@ -111,26 +140,3 @@ def get_base64_file(base64_data: str, max_file_size_mb: int = 100) -> Tuple[Opti
     except Exception as e:
         logger.error(f"Ошибка при декодировании base64 данных: {e}")
         return None, None, f"Error decoding base64 data: {str(e)}"
-
-
-def get_local_file(file_path: str, max_file_size_mb: int = 100) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    """
-    Получает локальный аудиофайл.
-
-    Returns:
-        Кортеж (путь к файлу, имя файла, сообщение об ошибке).
-        Примечание: возвращает оригинальный путь, не копирует файл.
-    """
-    if not os.path.exists(file_path):
-        return None, None, f"File not found: {file_path}"
-
-    try:
-        error = _check_size(os.path.getsize(file_path), max_file_size_mb)
-        if error:
-            return None, None, error
-
-        return file_path, os.path.basename(file_path), None
-
-    except Exception as e:
-        logger.error(f"Ошибка при открытии локального файла {file_path}: {e}")
-        return None, None, f"Error opening local file: {str(e)}"

@@ -224,13 +224,20 @@ The project consists of the following components:
 - `config.json`: Service configuration file
 - `app/`: Main application module
   - `__init__.py`: Contains the `WhisperServiceAPI` class for service initialization
-  - `utils.py`: Logging configuration
-  - `transcriber.py`: Contains the `WhisperTranscriber` class for speech recognition
-  - `audio_processor.py`: Contains the `AudioProcessor` class for audio preprocessing
-  - `audio_sources.py`: Contains different audio source handlers (upload, URL, base64, local)
-  - `transcriber_service.py`: Manages the transcription workflow
-  - `history_logger.py`: Handles saving transcription history
-  - `routes.py`: Contains the API route definitions
+  - `routes.py`: API route definitions
+  - `history.py`: Saving transcription history
+  - `core/`: Core logic
+    - `transcriber.py`: `WhisperTranscriber` class for speech recognition
+    - `transcription_service.py`: Manages the transcription workflow
+  - `audio/`: Audio processing
+    - `processor.py`: `AudioProcessor` class for audio preprocessing
+    - `sources.py`: Audio source handlers (upload, URL, base64)
+    - `utils.py`: Audio utilities (loading, duration)
+  - `infrastructure/`: Supporting modules
+    - `log.py`: Logging configuration
+    - `validation.py`: File validation
+    - `storage.py`: Temp file management
+    - `async_tasks.py`: Async task manager
   - `static/`: Web interface files
 
 ## Advanced usage

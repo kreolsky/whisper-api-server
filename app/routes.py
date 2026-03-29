@@ -9,8 +9,9 @@ from typing import Dict
 import logging
 
 from .core.transcription_service import TranscriptionService
-from .audio.sources import get_uploaded_file, get_url_file, get_base64_file, get_local_file
+from .audio.sources import get_uploaded_file, get_url_file, get_base64_file
 from .infrastructure.validation import ValidationError
+from .infrastructure.storage import cleanup_temp_files
 from .infrastructure.async_tasks import transcribe_audio_async, task_manager
 
 logger = logging.getLogger('app.routes')
@@ -42,33 +43,6 @@ class Routes:
         def get_config():
             """Эндпоинт для получения конфигурации сервиса."""
             return jsonify(self.config), 200
-
-        @self.app.route('/local/transcriptions', methods=['POST'])
-        def local_transcribe():
-            """Эндпоинт для локальной транскрибации файла по пути на сервере."""
-            data = request.json
-
-            if not data or "file_path" not in data:
-                return jsonify({"error": "No file_path provided"}), 400
-
-            file_path = data["file_path"]
-
-            try:
-                validated_path = self.file_validator.validate_local_file_path(
-                    file_path,
-                    allowed_directories=self.config.get("allowed_directories", [])
-                )
-            except ValidationError as e:
-                client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('REMOTE_ADDR', 'unknown'))
-                logger.warning(f"Невалидный путь '{file_path}' от {client_ip}: {e}")
-                return jsonify({"error": str(e)}), 400
-
-            temp_path, filename, error = get_local_file(validated_path, self._max_size)
-            if error:
-                return jsonify({"error": error}), 400
-
-            response, status_code = self.transcription_service.transcribe(temp_path, filename, data)
-            return jsonify(response), status_code
 
         @self.app.route('/v1/models', methods=['GET'])
         def list_models():
@@ -105,15 +79,15 @@ class Routes:
             if error:
                 return jsonify({"error": error}), 400
 
-            # Валидация файла
             try:
                 self.file_validator.validate_file_by_path(temp_path, filename)
+                response, status_code = self.transcription_service.transcribe(temp_path, filename, dict(request.form))
+                return jsonify(response), status_code
             except ValidationError as e:
                 logger.warning(f"Ошибка валидации файла '{filename}': {e}")
                 return jsonify({"error": str(e)}), 400
-
-            response, status_code = self.transcription_service.transcribe(temp_path, filename, dict(request.form))
-            return jsonify(response), status_code
+            finally:
+                cleanup_temp_files([temp_path])
 
         @self.app.route('/v1/audio/transcriptions/url', methods=['POST'])
         def transcribe_from_url():
@@ -135,12 +109,13 @@ class Routes:
 
             try:
                 self.file_validator.validate_file_by_path(temp_path, filename)
+                response, status_code = self.transcription_service.transcribe(temp_path, filename, params)
+                return jsonify(response), status_code
             except ValidationError as e:
                 logger.warning(f"Ошибка валидации файла '{filename}': {e}")
                 return jsonify({"error": str(e)}), 400
-
-            response, status_code = self.transcription_service.transcribe(temp_path, filename, params)
-            return jsonify(response), status_code
+            finally:
+                cleanup_temp_files([temp_path])
 
         @self.app.route('/v1/audio/transcriptions/base64', methods=['POST'])
         def transcribe_from_base64():
@@ -162,12 +137,13 @@ class Routes:
 
             try:
                 self.file_validator.validate_file_by_path(temp_path, filename)
+                response, status_code = self.transcription_service.transcribe(temp_path, filename, params)
+                return jsonify(response), status_code
             except ValidationError as e:
                 logger.warning(f"Ошибка валидации файла '{filename}': {e}")
                 return jsonify({"error": str(e)}), 400
-
-            response, status_code = self.transcription_service.transcribe(temp_path, filename, params)
-            return jsonify(response), status_code
+            finally:
+                cleanup_temp_files([temp_path])
 
         @self.app.route('/v1/audio/transcriptions/async', methods=['POST'])
         def transcribe_async():
@@ -179,8 +155,10 @@ class Routes:
             try:
                 self.file_validator.validate_file_by_path(temp_path, filename)
             except ValidationError as e:
+                cleanup_temp_files([temp_path])
                 return jsonify({"error": str(e)}), 400
 
+            # Не чистим temp_path здесь — async task отвечает за cleanup
             task_id = transcribe_audio_async(temp_path, self.transcription_service.transcriber)
             return jsonify({"task_id": task_id}), 202
 

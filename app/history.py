@@ -1,5 +1,5 @@
 """
-Модуль history_logger.py — сохранение истории транскрибации в JSON-файлы.
+Модуль history.py — сохранение истории транскрибации в JSON-файлы.
 """
 
 import os
@@ -13,7 +13,7 @@ import logging
 logger = logging.getLogger('app.history')
 
 # Корневая директория истории (относительно корня проекта)
-_history_root = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "history")
+_history_root = os.path.join(os.path.dirname(os.path.dirname(__file__)), "history")
 
 
 def save_history(result: Dict[str, Any], original_filename: str, config: Dict) -> Optional[str]:
