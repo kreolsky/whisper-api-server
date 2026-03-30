@@ -38,7 +38,7 @@ class AudioProcessor:
 
     def convert_to_wav(self, input_path: str) -> str:
         """
-        Конвертация входного аудиофайла в WAV формат с частотой дискретизации 16 кГц.
+        Конвертация входного аудиофайла в WAV формат с частотой дискретизации 16 кГц (моно).
         
         Args:
             input_path: Путь к исходному аудиофайлу.
@@ -50,18 +50,6 @@ class AudioProcessor:
             subprocess.CalledProcessError: Если произошла ошибка при конвертации.
         """
         audio_rate = self.config["audio_rate"]
-
-        # Проверка расширения файла
-        if input_path.lower().endswith('.wav'):
-            # Проверяем, нужно ли преобразовывать WAV-файл (например, если частота не 16 кГц)
-            try:
-                info = subprocess.check_output(['soxi', input_path]).decode()
-                if f'{audio_rate} Hz' in info:
-                    logger.info(f"Файл {input_path} уже в формате WAV с частотой {audio_rate} Гц")
-                    return input_path
-            except subprocess.CalledProcessError:
-                logger.warning(f"Не удалось получить информацию о WAV-файле {input_path}")
-                # Продолжаем конвертацию, чтобы быть уверенными в формате
 
         # Создаем временный файл для WAV
         output_path = create_temp_file(".wav")
@@ -77,14 +65,14 @@ class AudioProcessor:
             output_path
         ]
         
-        logger.debug(f"Конвертация в WAV: {' '.join(cmd)}")
+        logger.debug("Конвертация в WAV: %s", " ".join(cmd))
         
         try:
             subprocess.run(cmd, check=True, capture_output=True)
-            logger.info(f"Файл конвертирован в WAV: {output_path}")
+            logger.info("Файл конвертирован в WAV: %s", output_path)
             return output_path
         except subprocess.CalledProcessError as e:
-            logger.error(f"Ошибка при конвертации в WAV: {e.stderr.decode()}")
+            logger.error("Ошибка при конвертации в WAV: %s", e.stderr.decode())
             raise
     
     def normalize_audio(self, input_path: str) -> str:
@@ -112,14 +100,14 @@ class AudioProcessor:
             "compand"
         ] + self.compand_params.split()
         
-        logger.info(f"Нормализация аудио: {' '.join(cmd)}")
+        logger.debug("Нормализация аудио: %s", " ".join(cmd))
         
         try:
             subprocess.run(cmd, check=True, capture_output=True)
-            logger.info(f"Аудио нормализовано: {output_path}")
+            logger.info("Аудио нормализовано: %s", output_path)
             return output_path
         except subprocess.CalledProcessError as e:
-            logger.error(f"Ошибка при нормализации аудио: {e.stderr.decode()}")
+            logger.error("Ошибка при нормализации аудио: %s", e.stderr.decode())
             raise
     
     def add_silence(self, input_path: str) -> str:
@@ -146,14 +134,14 @@ class AudioProcessor:
             "pad", "2.0", "1.0"  # Добавление тишины в начале и в конце (секунды)
         ]
         
-        logger.info(f"Добавление тишины: {' '.join(cmd)}")
+        logger.info("Добавление тишины: %s", " ".join(cmd))
         
         try:
             subprocess.run(cmd, check=True, capture_output=True)
-            logger.info(f"Тишина добавлена: {output_path}")
+            logger.info("Тишина добавлена: %s", output_path)
             return output_path
         except subprocess.CalledProcessError as e:
-            logger.error(f"Ошибка при добавлении тишины: {e.stderr.decode()}")
+            logger.error("Ошибка при добавлении тишины: %s", e.stderr.decode())
             raise
     
     def process_audio(self, input_path: str) -> Tuple[str, list]:
@@ -188,6 +176,6 @@ class AudioProcessor:
             return silence_path, temp_files
         
         except Exception as e:
-            logger.error(f"Ошибка при обработке аудио {input_path}: {e}")
+            logger.error("Ошибка при обработке аудио %s: %s", input_path, e)
             cleanup_temp_files(temp_files)
             raise

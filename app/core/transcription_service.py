@@ -50,11 +50,15 @@ class TranscriptionService:
             try:
                 duration = get_audio_duration(file_path)
             except Exception as e:
-                logger.error(f"Ошибка при определении длительности файла: {e}")
+                logger.error("Ошибка при определении длительности файла: %s", e)
                 return {"error": f"Не удалось определить длительность аудиофайла: {e}"}, 500
 
             start_time = time.time()
-            result = self.transcriber.process_file(file_path, return_timestamps=return_timestamps)
+            result = self.transcriber.process_file(
+                file_path, return_timestamps=return_timestamps,
+                language=language, temperature=temperature,
+                prompt=prompt
+            )
             processing_time = time.time() - start_time
 
             # Формируем ответ
@@ -63,7 +67,7 @@ class TranscriptionService:
                     "segments": result.get("segments", []),
                     "text": result.get("text", ""),
                     "processing_time": processing_time,
-                    "response_size_bytes": len(json.dumps(result, ensure_ascii=False).encode('utf-8')),
+                    "response_size_bytes": 0,
                     "duration_seconds": duration,
                     "model": os.path.basename(self.config["model_path"])
                 }
@@ -71,15 +75,17 @@ class TranscriptionService:
                 response = {
                     "text": result,
                     "processing_time": processing_time,
-                    "response_size_bytes": len(json.dumps(result, ensure_ascii=False).encode('utf-8')),
+                    "response_size_bytes": 0,
                     "duration_seconds": duration,
                     "model": os.path.basename(self.config["model_path"])
                 }
+
+            response["response_size_bytes"] = len(json.dumps(response, ensure_ascii=False).encode('utf-8'))
 
             save_history(response, filename, self.config)
             return response, 200
 
         except Exception as e:
-            logger.error(f"Ошибка при транскрибации файла '{filename}': {str(e)}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error("Ошибка при транскрибации файла '%s': %s", filename, e)
+            logger.error("Traceback: %s", traceback.format_exc())
             return {"error": str(e)}, 500

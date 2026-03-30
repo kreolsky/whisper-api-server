@@ -3,10 +3,13 @@
 для сервиса распознавания речи.
 """
 
+from __future__ import annotations
+
 import os
-from flask import request, jsonify
-from typing import Dict
+from typing import Dict, TYPE_CHECKING
 import logging
+
+from flask import Flask, request, jsonify
 
 from .core.transcription_service import TranscriptionService
 from .audio.sources import get_uploaded_file, get_url_file, get_base64_file
@@ -14,13 +17,18 @@ from .infrastructure.validation import ValidationError
 from .infrastructure.storage import cleanup_temp_files
 from .infrastructure.async_tasks import transcribe_audio_async, task_manager
 
+if TYPE_CHECKING:
+    from .core.transcriber import WhisperTranscriber
+    from .infrastructure.validation import FileValidator
+
 logger = logging.getLogger('app.routes')
 
 
 class Routes:
     """Класс для регистрации всех эндпоинтов API."""
 
-    def __init__(self, app, transcriber, config: Dict, file_validator):
+    def __init__(self, app: Flask, transcriber: WhisperTranscriber,
+                 config: Dict, file_validator: FileValidator):
         self.app = app
         self.config = config
         self.transcription_service = TranscriptionService(transcriber, config)
@@ -41,7 +49,9 @@ class Routes:
 
         @self.app.route('/config', methods=['GET'])
         def get_config():
-            """Эндпоинт для получения конфигурации сервиса."""
+            """Эндпоинт для получения конфигурации сервиса.
+            Отдаёт полную конфигурацию включая model_path — это сознательное
+            решение, сервис работает во внутренней сети."""
             return jsonify(self.config), 200
 
         @self.app.route('/v1/models', methods=['GET'])
@@ -84,7 +94,7 @@ class Routes:
                 response, status_code = self.transcription_service.transcribe(temp_path, filename, dict(request.form))
                 return jsonify(response), status_code
             except ValidationError as e:
-                logger.warning(f"Ошибка валидации файла '{filename}': {e}")
+                logger.warning("Ошибка валидации файла '%s': %s", filename, e)
                 return jsonify({"error": str(e)}), 400
             finally:
                 cleanup_temp_files([temp_path])
@@ -112,7 +122,7 @@ class Routes:
                 response, status_code = self.transcription_service.transcribe(temp_path, filename, params)
                 return jsonify(response), status_code
             except ValidationError as e:
-                logger.warning(f"Ошибка валидации файла '{filename}': {e}")
+                logger.warning("Ошибка валидации файла '%s': %s", filename, e)
                 return jsonify({"error": str(e)}), 400
             finally:
                 cleanup_temp_files([temp_path])
@@ -140,7 +150,7 @@ class Routes:
                 response, status_code = self.transcription_service.transcribe(temp_path, filename, params)
                 return jsonify(response), status_code
             except ValidationError as e:
-                logger.warning(f"Ошибка валидации файла '{filename}': {e}")
+                logger.warning("Ошибка валидации файла '%s': %s", filename, e)
                 return jsonify({"error": str(e)}), 400
             finally:
                 cleanup_temp_files([temp_path])
@@ -158,8 +168,9 @@ class Routes:
                 cleanup_temp_files([temp_path])
                 return jsonify({"error": str(e)}), 400
 
+            params = dict(request.form)
             # Не чистим temp_path здесь — async task отвечает за cleanup
-            task_id = transcribe_audio_async(temp_path, self.transcription_service.transcriber)
+            task_id = transcribe_audio_async(temp_path, self.transcription_service, params)
             return jsonify({"task_id": task_id}), 202
 
         @self.app.route('/v1/tasks/<task_id>', methods=['GET'])
