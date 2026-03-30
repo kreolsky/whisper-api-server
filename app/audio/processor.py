@@ -59,6 +59,7 @@ class AudioProcessor:
             "ffmpeg",
             "-hide_banner",
             "-loglevel", "warning",
+            "-y",
             "-i", input_path,
             "-ar", f"{audio_rate}",
             "-ac", "1",  # Монофонический звук

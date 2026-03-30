@@ -36,7 +36,7 @@ class TranscriptionService:
             Кортеж (JSON-ответ, HTTP-код).
         """
         params = params or {}
-        language = params.get('language', self.config.get('language', 'en'))
+        language = params.get('language') or self.config.get('language', 'en')
         temperature = max(0.0, min(1.0, float(params.get('temperature', 0.0))))
         prompt = params.get('prompt', '')
 

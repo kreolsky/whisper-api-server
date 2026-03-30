@@ -1,7 +1,7 @@
 {
     "service_port": 5042,
     "model_path": "/home/text-generation/models/whisper/podlodka-turbo",
-    "language": "ru",
+    "language": "russian",
     "enable_history": true,
     "max_history_days": 30,
     "chunk_length_s": 28,
