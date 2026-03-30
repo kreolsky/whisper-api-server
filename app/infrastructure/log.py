@@ -91,7 +91,8 @@ class RequestLogger:
             return
         g.start_time = time.time()
         self.logger.info(
-            f"{request.method} {request.path} от {self._get_client_ip()}",
+            "%s %s от %s",
+            request.method, request.path, self._get_client_ip(),
             extra={"type": "request"}
         )
 
@@ -100,7 +101,8 @@ class RequestLogger:
             return response
         processing_time = time.time() - getattr(g, 'start_time', time.time())
         self.logger.info(
-            f"{response.status_code} за {processing_time:.3f} сек",
+            "%s за %.3f сек",
+            response.status_code, processing_time,
             extra={"type": "response"}
         )
         return response

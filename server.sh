@@ -48,7 +48,10 @@ if [[ "$NEW_ENV_CREATED" == true || "$UPDATE_ENV" == true ]]; then
     # Установка зависимостей из requirements.txt
     if [ -f "requirements.txt" ]; then
         echo "Установка зависимостей из requirements.txt"
-        pip install --no-cache-dir -r requirements.txt
+        if ! pip install --no-cache-dir -r requirements.txt; then
+            echo "Ошибка при установке зависимостей."
+            exit 1
+        fi
     else
         echo "Файл requirements.txt не найден. Убедитесь, что он находится в той же директории, что и скрипт."
         exit 1

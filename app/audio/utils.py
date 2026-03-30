@@ -6,7 +6,7 @@ import os
 import subprocess
 import wave
 import numpy as np
-from scipy.signal import resample as scipy_resample
+from scipy.signal import resample_poly
 import logging
 from typing import Tuple
 
@@ -27,21 +27,21 @@ def load_audio(file_path: str, sr: int = 16000) -> Tuple[np.ndarray, int]:
     try:
         with wave.open(file_path, 'rb') as wav_file:
             if wav_file.getnchannels() != 1:
-                logger.warning(f"Файл {file_path} не моно-аудио")
+                logger.warning("Файл %s не моно-аудио", file_path)
 
             frames = wav_file.readframes(-1)
             audio_array = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
             sampling_rate = wav_file.getframerate()
 
             if sampling_rate != sr:
-                num_samples = int(len(audio_array) * sr / sampling_rate)
-                audio_array = scipy_resample(audio_array, num_samples)
+                gcd = np.gcd(sr, sampling_rate)
+                audio_array = resample_poly(audio_array, sr // gcd, sampling_rate // gcd)
                 sampling_rate = sr
 
             return audio_array, sampling_rate
 
     except Exception as e:
-        logger.error(f"Ошибка при загрузке аудио {file_path}: {e}")
+        logger.error("Ошибка при загрузке аудио %s: %s", file_path, e)
         raise
 
 

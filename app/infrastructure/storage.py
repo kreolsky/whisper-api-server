@@ -3,7 +3,6 @@
 """
 
 import os
-import uuid
 import tempfile
 import logging
 
@@ -20,15 +19,15 @@ def create_temp_file(suffix: str = ".wav") -> str:
     Returns:
         Путь к временному файлу.
     """
-    temp_dir = tempfile.mkdtemp()
-    temp_path = os.path.join(temp_dir, f"{uuid.uuid4()}{suffix}")
-    logger.debug(f"Создан временный файл: {temp_path}")
+    fd, temp_path = tempfile.mkstemp(suffix=suffix)
+    os.close(fd)
+    logger.debug("Создан временный файл: %s", temp_path)
     return temp_path
 
 
 def cleanup_temp_files(file_paths: list) -> None:
     """
-    Удаляет временные файлы и их директории.
+    Удаляет временные файлы.
 
     Args:
         file_paths: Список путей к файлам для удаления.
@@ -37,10 +36,6 @@ def cleanup_temp_files(file_paths: list) -> None:
         try:
             if os.path.exists(path):
                 os.remove(path)
-                logger.debug(f"Удалён временный файл: {path}")
-
-                temp_dir = os.path.dirname(path)
-                if os.path.exists(temp_dir) and not os.listdir(temp_dir):
-                    os.rmdir(temp_dir)
+                logger.debug("Удалён временный файл: %s", path)
         except Exception as e:
-            logger.warning(f"Не удалось очистить временный файл {path}: {e}")
+            logger.warning("Не удалось очистить временный файл %s: %s", path, e)

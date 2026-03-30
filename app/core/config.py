@@ -27,11 +27,11 @@ def load_config(config_path: str) -> Dict:
     try:
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
-        logger.info(f"Конфигурация успешно загружена из {config_path}")
+        logger.info("Конфигурация успешно загружена из %s", config_path)
         return config
     except FileNotFoundError as e:
-        logger.error(f"Файл конфигурации не найден: {e}")
+        logger.error("Файл конфигурации не найден: %s", e)
         raise
     except json.JSONDecodeError as e:
-        logger.error(f"Ошибка при загрузке конфигурации: {e}")
+        logger.error("Ошибка при загрузке конфигурации: %s", e)
         raise

@@ -3,6 +3,8 @@
 и запуска сервиса распознавания речи.
 """
 
+__all__ = ['WhisperServiceAPI']
+
 import os
 import logging
 from flask import Flask
@@ -68,7 +70,7 @@ class WhisperServiceAPI:
 
     def run(self) -> None:
         """Запуск сервиса через Waitress."""
-        self.logger.info(f"Запуск сервиса на 0.0.0.0:{self.port}")
+        self.logger.info("Запуск сервиса на 0.0.0.0:%s", self.port)
         waitress.serve(self.app, host='0.0.0.0', port=self.port)
 
     def create_app(self) -> Flask:

@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(git -C /Users/serge/Develop/nnp-whisper-api-server log --oneline -10 --all)",
-      "Bash(git -C /Users/serge/Develop/nnp-whisper-api-server log --oneline main..cleanup/dead-code)"
+      "Bash(git -C /Users/serge/Develop/nnp-whisper-api-server log --oneline main..cleanup/dead-code)",
+      "Bash(ssh orange:*)",
+      "Bash(curl -s http://stt.ai.gray/health)",
+      "Bash(curl -s http://stt.ai.gray/v1/models)"
     ]
   }
 }
