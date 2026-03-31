@@ -73,14 +73,26 @@ The service is configured through the `config.json` file:
     "model_path": "/path/to/whisper/model",
     "language": "russian",
     "enable_history": true,
+    "max_history_days": 30,
     "chunk_length_s": 28,
-    "batch_size": 8,
+    "batch_size": 6,
     "max_new_tokens": 384,
     "temperature": 0.01,
     "return_timestamps": false,
-    "audio_rate": 8000,
+    "audio_rate": 16000,
     "norm_level": "-0.55",
-    "compand_params": "0.3,1 -90,-90,-70,-50,-40,-15,0,0 -7 0 0.15"
+    "compand_params": "0.3,1 -90,-90,-70,-50,-40,-15,0,0 -7 0 0.15",
+    "device_id": 0,
+    "file_validation": {
+        "max_file_size_mb": 500,
+        "allowed_extensions": [".wav", ".mp3", ".ogg", ".flac", ".m4a", ".oga", ".aac", ".webm"],
+        "allowed_mime_types": ["audio/wav", "audio/mpeg", "audio/ogg", "audio/flac", "audio/mp4", "audio/x-m4a", "audio/aac", "audio/webm"]
+    },
+    "log_level": "INFO",
+    "log_file": "logs/whisper_api.log",
+    "request_logging": {
+        "exclude_endpoints": ["/health", "/static"]
+    }
 }
 ```
 
@@ -92,6 +104,7 @@ The service is configured through the `config.json` file:
 | `model_path` | Path to the Whisper model directory |
 | `language` | Language for transcription (e.g., "russian", "english") |
 | `enable_history` | Whether to save transcription history (true/false) |
+| `max_history_days` | Number of days to keep transcription history before rotation |
 | `chunk_length_s` | Length of audio chunks for processing (in seconds) |
 | `batch_size` | Batch size for processing |
 | `max_new_tokens` | Maximum new tokens for the model output |
@@ -100,6 +113,13 @@ The service is configured through the `config.json` file:
 | `audio_rate` | Audio sampling rate in Hz |
 | `norm_level` | Normalization level for audio preprocessing |
 | `compand_params` | Parameters for audio compression/expansion |
+| `device_id` | CUDA device index to use for inference |
+| `file_validation.max_file_size_mb` | Maximum allowed file size in megabytes |
+| `file_validation.allowed_extensions` | List of accepted audio file extensions |
+| `file_validation.allowed_mime_types` | List of accepted MIME types |
+| `log_level` | Logging level (DEBUG, INFO, WARNING, ERROR) |
+| `log_file` | Path to the log file |
+| `request_logging.exclude_endpoints` | Endpoints excluded from request logging |
 
 ## Web interface
 
@@ -159,13 +179,32 @@ curl -X POST http://localhost:5042/v1/audio/transcriptions/base64 \
   -d '{"file":"base64_encoded_audio_data"}'
 ```
 
-### Transcribe a local file on the server
+### Transcribe asynchronously
+
+Submit a file for background transcription and receive a task ID:
 
 ```bash
-curl -X POST http://localhost:5042/local/transcriptions \
-  -H "Content-Type: application/json" \
-  -d '{"file_path":"/path/to/audio.mp3"}'
+curl -X POST http://localhost:5042/v1/audio/transcriptions/async \
+  -F file=@audio.mp3
 ```
+
+Response:
+```json
+{"task_id": "abc123..."}
+```
+
+### Get async task status
+
+```bash
+curl http://localhost:5042/v1/tasks/<task_id>
+```
+
+Response when completed:
+```json
+{"task_id": "abc123...", "status": "completed", "result": {...}}
+```
+
+Possible statuses: `pending`, `completed`, `failed`.
 
 ### Request with additional parameters
 
@@ -253,7 +292,7 @@ You can use any Whisper model by changing the `model_path` in the configuration:
 ### Hardware acceleration
 
 The service automatically selects the best available compute device:
-- CUDA GPU (index 1 if available, otherwise index 0)
+- CUDA GPU (device index configured via `device_id` in `config.json`)
 - Apple Silicon MPS (for Mac with M1/M2/M3 chips)
 - CPU (fallback)
 
