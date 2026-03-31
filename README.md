@@ -254,38 +254,13 @@ curl -X POST http://localhost:5042/v1/audio/transcriptions \
 }
 ```
 
-## Project structure
-
-The project consists of the following components:
-
-- `server.py`: Entry point that initializes and starts the service
-- `server.sh`: Bash script for launching the server with optional conda environment update
-- `config.json`: Service configuration file
-- `app/`: Main application module
-  - `__init__.py`: Contains the `WhisperServiceAPI` class for service initialization
-  - `routes.py`: API route definitions
-  - `history.py`: Saving transcription history
-  - `core/`: Core logic
-    - `transcriber.py`: `WhisperTranscriber` class for speech recognition
-    - `transcription_service.py`: Manages the transcription workflow
-  - `audio/`: Audio processing
-    - `processor.py`: `AudioProcessor` class for audio preprocessing
-    - `sources.py`: Audio source handlers (upload, URL, base64)
-    - `utils.py`: Audio utilities (loading, duration)
-  - `infrastructure/`: Supporting modules
-    - `log.py`: Logging configuration
-    - `validation.py`: File validation
-    - `storage.py`: Temp file management
-    - `async_tasks.py`: Async task manager
-  - `static/`: Web interface files
-
 ## Advanced usage
 
 ### Using with different models
 
 You can use any Whisper model by changing the `model_path` in the configuration:
 
-1. Download a model from Hugging Face (e.g., `openai/whisper-large-v3`)
+1. Download a model from Hugging Face
 2. Update the `model_path` in `config.json`
 3. Restart the service
 
