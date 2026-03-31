@@ -264,6 +264,8 @@ You can use any Whisper model by changing the `model_path` in the configuration:
 2. Update the `model_path` in `config.json`
 3. Restart the service
 
+The recommended model for Russian speech recognition is [whisper-large-v3-russian-ties-podlodka-v1.2](https://huggingface.co/Apel-sin/whisper-large-v3-russian-ties-podlodka-v1.2).
+
 ### Hardware acceleration
 
 The service automatically selects the best available compute device:
