@@ -11,6 +11,7 @@ from typing import Dict, Tuple
 import logging
 
 from ..infrastructure.storage import create_temp_file, cleanup_temp_files
+from .utils import get_audio_duration
 
 logger = logging.getLogger('app.audio_processor')
 
@@ -145,27 +146,30 @@ class AudioProcessor:
             logger.error("Ошибка при добавлении тишины: %s", e.stderr.decode())
             raise
     
-    def process_audio(self, input_path: str) -> Tuple[str, list]:
+    def process_audio(self, input_path: str) -> Tuple[str, list, float]:
         """
         Полная обработка аудиофайла: конвертация, нормализация и добавление тишины.
-        
+
         Args:
             input_path: Путь к исходному аудиофайлу.
-            
+
         Returns:
-            Кортеж: (путь к обработанному файлу, список временных файлов для удаления)
-            
+            Кортеж: (путь к обработанному файлу, список временных файлов для удаления, длительность в секундах)
+
         Raises:
             Exception: Если произошла ошибка при обработке аудио.
         """
         temp_files = []
-        
+
         try:
             # Конвертация в WAV
             wav_path = self.convert_to_wav(input_path)
             if wav_path != input_path:  # Если был создан временный файл
                 temp_files.append(wav_path)
-            
+
+            # Определяем длительность из WAV (до добавления тишины)
+            duration = get_audio_duration(wav_path)
+
             # Нормализация
             normalized_path = self.normalize_audio(wav_path)
             temp_files.append(normalized_path)
@@ -173,9 +177,9 @@ class AudioProcessor:
             # Добавление тишины
             silence_path = self.add_silence(normalized_path)
             temp_files.append(silence_path)
-            
-            return silence_path, temp_files
-        
+
+            return silence_path, temp_files, duration
+
         except Exception as e:
             logger.error("Ошибка при обработке аудио %s: %s", input_path, e)
             cleanup_temp_files(temp_files)

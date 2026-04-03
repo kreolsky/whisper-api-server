@@ -10,7 +10,6 @@ import traceback
 from typing import Dict, Tuple
 import logging
 
-from ..audio.utils import get_audio_duration
 from ..history import save_history
 
 logger = logging.getLogger('app.transcription_service')
@@ -46,15 +45,8 @@ class TranscriptionService:
             return_timestamps = return_timestamps.lower() in ('true', 't', 'yes', 'y', '1')
 
         try:
-            # Определяем длительность аудиофайла
-            try:
-                duration = get_audio_duration(file_path)
-            except Exception as e:
-                logger.error("Ошибка при определении длительности файла: %s", e)
-                return {"error": f"Не удалось определить длительность аудиофайла: {e}"}, 500
-
             start_time = time.time()
-            result = self.transcriber.process_file(
+            result, duration = self.transcriber.process_file(
                 file_path, return_timestamps=return_timestamps,
                 language=language, temperature=temperature,
                 prompt=prompt

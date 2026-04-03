@@ -286,7 +286,7 @@ class WhisperTranscriber:
 
     def process_file(self, input_path: str, return_timestamps: bool = None,
                      language: str = None, temperature: float = None,
-                     prompt: str = None) -> Union[str, Dict]:
+                     prompt: str = None) -> Tuple[Union[str, Dict], float]:
         """
         Полный процесс обработки и транскрибации аудиофайла.
 
@@ -298,28 +298,26 @@ class WhisperTranscriber:
             prompt: Текстовая подсказка для модели (имена, термины, контекст).
 
         Returns:
-            В зависимости от параметра return_timestamps:
-            - Если return_timestamps=False: строка с распознанным текстом
-            - Если return_timestamps=True: словарь с ключами "segments" и "text"
+            Кортеж (результат транскрибации, длительность аудио в секундах).
         """
         start_time = time.time()
         logger.info("Начало обработки файла: %s", input_path)
-        
+
         temp_files = []
-        
+
         try:
             # Обработка аудио (конвертация, нормализация, добавление тишины)
-            processed_path, temp_files = self.audio_processor.process_audio(input_path)
-            
+            processed_path, temp_files, duration = self.audio_processor.process_audio(input_path)
+
             # Транскрибация
             result = self.transcribe(processed_path, return_timestamps=return_timestamps,
                                      language=language, temperature=temperature,
                                      prompt=prompt)
-            
+
             elapsed_time = time.time() - start_time
             logger.info("Обработка и транскрибация завершены за %.2f секунд", elapsed_time)
-            
-            return result
+
+            return result, duration
             
         except Exception as e:
             elapsed_time = time.time() - start_time
