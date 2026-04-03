@@ -5,7 +5,11 @@
       "Bash(git -C /Users/serge/Develop/nnp-whisper-api-server log --oneline main..cleanup/dead-code)",
       "Bash(ssh orange:*)",
       "Bash(curl -s http://stt.ai.gray/health)",
-      "Bash(curl -s http://stt.ai.gray/v1/models)"
+      "Bash(curl -s http://stt.ai.gray/v1/models)",
+      "Bash(scp app/audio/processor.py orange:/home/text-generation/servers/whisper-api/app/audio/processor.py)",
+      "Bash(scp app/core/transcriber.py orange:/home/text-generation/servers/whisper-api/app/core/transcriber.py)",
+      "Bash(scp app/core/transcription_service.py orange:/home/text-generation/servers/whisper-api/app/core/transcription_service.py)",
+      "Bash(ssh root@orange \"systemctl status whisper.service\")"
     ]
   }
 }

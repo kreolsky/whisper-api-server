@@ -133,6 +133,7 @@ def get_base64_file(base64_data: str, max_file_size_mb: int = 100) -> Tuple[Opti
             "audio/x-m4a": ".m4a",
             "audio/aac": ".aac",
             "audio/webm": ".webm",
+            "video/webm": ".webm",
         }
         detected_mime = magic.from_buffer(audio_data[:1024], mime=True)
         suffix = mime_to_ext.get(detected_mime, ".wav")

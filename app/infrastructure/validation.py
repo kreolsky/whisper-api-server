@@ -16,6 +16,14 @@ class ValidationError(Exception):
     pass
 
 
+# Маппинг MIME-типов контейнерных форматов: video/* → audio/* эквивалент
+_MIME_EQUIVALENTS = {
+    "video/webm": "audio/webm",
+    "video/ogg": "audio/ogg",
+    "video/mp4": "audio/mp4",
+}
+
+
 class FileValidator:
     """
     Класс для валидации файлов.
@@ -84,7 +92,8 @@ class FileValidator:
         # Проверка MIME-типа
         try:
             mime_type = magic.from_file(file_path, mime=True)
-            if mime_type not in self.allowed_mime_types:
+            normalized = _MIME_EQUIVALENTS.get(mime_type, mime_type)
+            if normalized not in self.allowed_mime_types:
                 raise ValidationError(f"MIME-тип файла ({mime_type}) не разрешен. "
                                      f"Разрешенные MIME-типы: {', '.join(self.allowed_mime_types)}")
         except ValidationError:
