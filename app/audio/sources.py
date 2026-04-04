@@ -126,6 +126,7 @@ def get_base64_file(base64_data: str, max_file_size_mb: int = 100) -> Tuple[Opti
 
         # Определяем формат по содержимому
         mime_to_ext = {
+            "audio/x-wav": ".wav",
             "audio/mpeg": ".mp3",
             "audio/ogg": ".ogg",
             "audio/flac": ".flac",

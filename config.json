@@ -16,7 +16,7 @@
     "file_validation": {
         "max_file_size_mb": 500,
         "allowed_extensions": [".wav", ".mp3", ".ogg", ".flac", ".m4a", ".oga", ".aac", ".webm"],
-        "allowed_mime_types": ["audio/wav", "audio/mpeg", "audio/ogg", "audio/flac", "audio/mp4", "audio/x-m4a", "audio/aac", "audio/webm"]
+        "allowed_mime_types": ["audio/wav", "audio/mpeg", "audio/ogg", "audio/flac", "audio/mp4", "audio/aac", "audio/webm"]
     },
     "log_level": "INFO",
     "log_file": "logs/whisper_api.log",

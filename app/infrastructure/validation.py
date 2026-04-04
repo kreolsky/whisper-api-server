@@ -18,6 +18,8 @@ class ValidationError(Exception):
 
 # Маппинг MIME-типов контейнерных форматов: video/* → audio/* эквивалент
 _MIME_EQUIVALENTS = {
+    "audio/x-wav": "audio/wav",
+    "audio/x-m4a": "audio/mp4",
     "video/webm": "audio/webm",
     "video/ogg": "audio/ogg",
     "video/mp4": "audio/mp4",
@@ -31,20 +33,29 @@ class FileValidator:
     Проверяет тип файла, размер и другие параметры на основе конфигурации.
     """
     
+    _REQUIRED_KEYS = ("max_file_size_mb", "allowed_extensions", "allowed_mime_types")
+
     def __init__(self, config: Dict):
         """
         Инициализация валидатора файлов.
-        
+
         Args:
             config: Словарь с параметрами конфигурации.
+
+        Raises:
+            KeyError: Если в конфигурации отсутствует секция file_validation или обязательные ключи.
         """
-        self.validation_config = config.get("file_validation", {})
-        self.max_file_size_mb = self.validation_config.get("max_file_size_mb", 100)
-        self.allowed_extensions = self.validation_config.get("allowed_extensions", 
-                                                             [".wav", ".mp3", ".ogg", ".flac", ".m4a"])
-        self.allowed_mime_types = self.validation_config.get("allowed_mime_types", 
-                                                            ["audio/wav", "audio/mpeg", "audio/ogg", 
-                                                             "audio/flac", "audio/mp4"])
+        if "file_validation" not in config:
+            raise KeyError("В конфигурации отсутствует секция 'file_validation'")
+
+        validation_config = config["file_validation"]
+        missing = [k for k in self._REQUIRED_KEYS if k not in validation_config]
+        if missing:
+            raise KeyError(f"В секции 'file_validation' отсутствуют ключи: {', '.join(missing)}")
+
+        self.max_file_size_mb = validation_config["max_file_size_mb"]
+        self.allowed_extensions = validation_config["allowed_extensions"]
+        self.allowed_mime_types = validation_config["allowed_mime_types"]
     
     def _validate_file_extension(self, filename: str) -> None:
         """
