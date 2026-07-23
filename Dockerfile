@@ -22,4 +22,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 5042
 
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5042/health')" || exit 1
+
 CMD ["python", "server.py", "--config", "config.json"]

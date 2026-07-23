@@ -1,28 +1,30 @@
 """Модуль core — основные компоненты сервиса распознавания речи."""
 
-from typing import Dict
+from .config import AppConfig
+from .registry import register_model, discover_transcribers, get_transcriber_class
+from .base import Transcriber
 
 
-def create_transcriber(config: Dict):
+def create_transcriber(config: AppConfig) -> Transcriber:
     """
     Создание транскрайбера на основе типа модели в конфигурации.
+    Использует registry-паттерн — модели регистрируются через @register_model.
 
     Args:
-        config: Словарь с параметрами конфигурации.
+        config: Типизированная конфигурация приложения.
 
     Returns:
-        Экземпляр WhisperTranscriber или GigaAMTranscriber.
+        Экземпляр транскрайбера.
 
     Raises:
         ValueError: Если указан неизвестный тип модели.
     """
-    model_type = config.get("model_type", "whisper")
+    discover_transcribers()
 
-    if model_type == "whisper":
-        from .whisper_transcriber import WhisperTranscriber
-        return WhisperTranscriber(config)
-    elif model_type == "gigaam":
-        from .gigaam_transcriber import GigaAMTranscriber
-        return GigaAMTranscriber(config)
-    else:
-        raise ValueError(f"Неизвестный тип модели: {model_type}")
+    cls = get_transcriber_class(config.model_type)
+    if cls is None:
+        from .registry import get_registered_model_types
+        available = ", ".join(get_registered_model_types())
+        raise ValueError(f"Неизвестный тип модели: {config.model_type}. Доступные: {available}")
+
+    return cls(config)

@@ -1,13 +1,14 @@
 """
-Модуль validation.py содержит классы и функции для валидации входных данных.
+Модуль validation.py — валидация входных данных (файлы, MIME-типы).
 """
 
 import os
 import magic
-from typing import Dict, List
+from typing import List
 import logging
 
-# Получаем логгер из централизованной настройки
+from ..core.config import AppConfig, FileValidationConfig
+
 logger = logging.getLogger('app.validators')
 
 
@@ -16,7 +17,6 @@ class ValidationError(Exception):
     pass
 
 
-# Маппинг MIME-типов контейнерных форматов: video/* → audio/* эквивалент
 _MIME_EQUIVALENTS = {
     "audio/x-wav": "audio/wav",
     "audio/x-m4a": "audio/mp4",
@@ -32,53 +32,49 @@ _MIME_EQUIVALENTS = {
 class FileValidator:
     """
     Класс для валидации файлов.
-    
+
     Проверяет тип файла, размер и другие параметры на основе конфигурации.
     """
-    
-    _REQUIRED_KEYS = ("max_file_size_mb", "allowed_extensions", "allowed_mime_types")
 
-    def __init__(self, config: Dict):
+    def __init__(self, config: AppConfig):
         """
         Инициализация валидатора файлов.
 
         Args:
-            config: Словарь с параметрами конфигурации.
+            config: Типизированная конфигурация приложения.
 
         Raises:
-            KeyError: Если в конфигурации отсутствует секция file_validation или обязательные ключи.
+            KeyError: Если в конфигурации отсутствуют обязательные ключи file_validation.
         """
-        if "file_validation" not in config:
-            raise KeyError("В конфигурации отсутствует секция 'file_validation'")
+        fv = config.file_validation
+        if not fv.max_file_size_mb or not fv.allowed_extensions or not fv.allowed_mime_types:
+            raise KeyError("В секции 'file_validation' отсутствуют обязательные ключи")
 
-        validation_config = config["file_validation"]
-        missing = [k for k in self._REQUIRED_KEYS if k not in validation_config]
-        if missing:
-            raise KeyError(f"В секции 'file_validation' отсутствуют ключи: {', '.join(missing)}")
+        self.max_file_size_mb = fv.max_file_size_mb
+        self.allowed_extensions: List[str] = fv.allowed_extensions
+        self.allowed_mime_types: List[str] = fv.allowed_mime_types
 
-        self.max_file_size_mb = validation_config["max_file_size_mb"]
-        self.allowed_extensions = validation_config["allowed_extensions"]
-        self.allowed_mime_types = validation_config["allowed_mime_types"]
-    
     def _validate_file_extension(self, filename: str) -> None:
         """
         Валидирует расширение файла.
-        
+
         Args:
             filename: Имя файла.
-            
+
+        Returns:
+            None при успешной валидации.
+
         Raises:
             ValidationError: Если расширение файла не входит в список разрешенных.
         """
         if not any(filename.lower().endswith(ext.lower()) for ext in self.allowed_extensions):
-            # Логирование попытки загрузки файла с неразрешенным расширением
             file_extension = os.path.splitext(filename)[1]
             logger.warning("Попытка загрузки файла с неразрешенным расширением '%s'. "
                           "Имя файла: %s. Разрешенные расширения: %s", file_extension, filename, ", ".join(self.allowed_extensions))
-            
+
             raise ValidationError(f"Расширение файла не разрешено. "
                                  f"Разрешенные расширения: {', '.join(self.allowed_extensions)}")
-    
+
     def validate_file_by_path(self, file_path: str, filename: str) -> bool:
         """
         Валидирует файл по пути на диске.
@@ -93,17 +89,14 @@ class FileValidator:
         Raises:
             ValidationError: Если файл не прошел валидацию.
         """
-        # Проверка расширения
         self._validate_file_extension(filename)
 
-        # Проверка размера
         file_size = os.path.getsize(file_path)
         max_size_bytes = self.max_file_size_mb * 1024 * 1024
         if file_size > max_size_bytes:
             raise ValidationError(f"Размер файла ({file_size / (1024*1024):.2f} МБ) "
                                  f"превышает максимально допустимый ({self.max_file_size_mb} МБ)")
 
-        # Проверка MIME-типа
         try:
             mime_type = magic.from_file(file_path, mime=True)
             normalized = _MIME_EQUIVALENTS.get(mime_type, mime_type)

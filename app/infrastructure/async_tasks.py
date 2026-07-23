@@ -126,25 +126,3 @@ class AsyncTaskManager:
 
         thread = Thread(target=_cleanup_loop, daemon=True)
         thread.start()
-
-
-# Глобальный экземпляр менеджера асинхронных задач
-task_manager = AsyncTaskManager()
-
-
-def transcribe_audio_async(file_path: str, transcription_service, params: Dict = None) -> str:
-    """
-    Асинхронная транскрибация аудиофайла.
-    
-    Args:
-        file_path: Путь к аудиофайлу.
-        transcription_service: Экземпляр TranscriptionService.
-        params: Параметры транскрибации.
-        
-    Returns:
-        ID задачи.
-    """
-    params = params or {}
-    def _transcribe():
-        return transcription_service.transcribe(file_path, "async_task", params)
-    return task_manager.run_task(_transcribe)

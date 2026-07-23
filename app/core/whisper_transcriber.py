@@ -1,9 +1,6 @@
 """
-Модуль transcriber.py содержит класс WhisperTranscriber, который использует модель Whisper от 
-OpenAI для транскрибации аудиофайлов в текст. Класс включает в себя методы для загрузки модели, 
-обработки аудио (с использованием класса AudioProcessor), и выполнения транскрибации. 
-Обрабатывает выбор устройства (CPU, CUDA, MPS) для выполнения вычислений и обеспечивает 
-возможность использования Flash Attention 2 для ускорения работы модели на поддерживаемых GPU.
+Модуль whisper_transcriber.py — транскрайбер на основе модели Whisper.
+Обрабатывает выбор устройства (CPU, CUDA, MPS) и Flash Attention 2.
 """
 
 import time
@@ -20,6 +17,8 @@ from transformers import (
     pipeline,
 )
 
+from .registry import register_model
+from .config import AppConfig
 from ..audio.processor import AudioProcessor
 from ..audio.utils import load_audio
 from ..infrastructure.storage import cleanup_temp_files
@@ -27,6 +26,7 @@ from ..infrastructure.storage import cleanup_temp_files
 logger = logging.getLogger('app.transcriber')
 
 
+@register_model("whisper")
 class WhisperTranscriber:
     """
     Класс для распознавания речи с помощью модели Whisper.
@@ -48,26 +48,25 @@ class WhisperTranscriber:
         asr_pipeline (pipeline): Пайплайн для автоматического распознавания речи.
     """
     
-    def __init__(self, config: Dict):
+    def __init__(self, config: AppConfig):
         """
         Инициализация транскрайбера.
 
         Args:
-            config: Словарь с параметрами конфигурации.
+            config: Типизированная конфигурация приложения.
         """
         self.config = config
-        self.model_path = config["model_path"]
-        self.language = config["language"]
-        self.chunk_length_s = config["chunk_length_s"]
-        self.batch_size = config["batch_size"]
-        self.max_new_tokens = config["max_new_tokens"]
-        self.return_timestamps = config["return_timestamps"]
-        self.temperature = config["temperature"]
+        model_config = config.model
+        self.model_path = model_config["model_path"]
+        self.language = model_config["language"]
+        self.chunk_length_s = model_config["chunk_length_s"]
+        self.batch_size = model_config["batch_size"]
+        self.max_new_tokens = model_config["max_new_tokens"]
+        self.return_timestamps = config.return_timestamps
+        self.temperature = model_config["temperature"]
 
-        # Lock для потокобезопасного доступа к модели —
-        # Waitress обслуживает запросы в нескольких потоках,
-        # а HuggingFace pipeline не является thread-safe
-        self._inference_lock = threading.Lock()
+        max_concurrent = config.max_concurrent_inference
+        self._inference_lock = threading.Semaphore(max_concurrent)
 
         # Создаем объект для обработки аудио
         self.audio_processor = AudioProcessor(config)
@@ -78,8 +77,17 @@ class WhisperTranscriber:
         # Оптимальный тип для тензоров (зависит от устройства)
         self.torch_dtype = self._get_torch_dtype()
 
-        # Загружаем модель при инициализации
+        self.model = None
+        self.processor = None
+        self.asr_pipeline = None
+        self._model_loaded = False
+
         self._load_model()
+        self._model_loaded = True
+
+    @property
+    def is_ready(self) -> bool:
+        return self._model_loaded and self.model is not None and self.processor is not None
 
     def _get_device(self) -> torch.device:
         """
@@ -90,7 +98,7 @@ class WhisperTranscriber:
         """
         if torch.cuda.is_available():
             # Получаем device_id из конфигурации, по умолчанию 0
-            device_id = self.config.get("device_id", 0)
+            device_id = self.config.model.get("device_id", 0)
             
             # Проверяем, что device_id является целым числом
             if not isinstance(device_id, int):

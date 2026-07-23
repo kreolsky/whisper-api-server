@@ -7,7 +7,18 @@ import time
 import logging
 from logging.handlers import RotatingFileHandler
 from flask import request, g
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Union
+
+from ..core.config import RequestLoggingConfig
+
+
+class CustomFormatter(logging.Formatter):
+    """Форматтер, добавляющий поле type к каждой записи лога."""
+
+    def format(self, record):
+        if not hasattr(record, 'type'):
+            record.type = 'general'
+        return super().format(record)
 
 
 def setup_logging(log_level=logging.INFO, log_file=None):
@@ -24,12 +35,6 @@ def setup_logging(log_level=logging.INFO, log_file=None):
     # Очищаем существующие обработчики
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
-
-    class CustomFormatter(logging.Formatter):
-        def format(self, record):
-            if not hasattr(record, 'type'):
-                record.type = 'general'
-            return super().format(record)
 
     formatter = CustomFormatter(
         '%(asctime)s - %(name)s - %(levelname)s - [%(type)s] %(message)s'
@@ -61,10 +66,13 @@ def setup_logging(log_level=logging.INFO, log_file=None):
 class RequestLogger:
     """Middleware для логирования HTTP-запросов и ответов."""
 
-    def __init__(self, app=None, config: Optional[Dict] = None):
-        self.config = config or {}
+    def __init__(self, app=None, config: Optional[Union[Dict, RequestLoggingConfig]] = None):
         self.logger = logging.getLogger('app.request')
-        self.exclude_endpoints = set(self.config.get('exclude_endpoints', ['/health', '/static']))
+        if isinstance(config, RequestLoggingConfig):
+            self.exclude_endpoints = set(config.exclude_endpoints)
+        else:
+            self.config = config or {}
+            self.exclude_endpoints = set(self.config.get('exclude_endpoints', ['/health', '/static']))
 
         if app is not None:
             self.init_app(app)

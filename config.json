@@ -1,5 +1,6 @@
 {
-    "model_type": "gigaam",
+    "version": "1.0.0",
+    "model_type": "gigaam-multilingual",
 
     "models": {
         "whisper": {
@@ -17,6 +18,10 @@
             "model_path": "/home/text-generation/models/whisper/gigaAM-v3",
             "variant": "v3_e2e_rnnt",
             "segmentation_model": "/home/text-generation/models/whisper/gigaAM-v3/segmentation"
+        },
+        "gigaam-multilingual": {
+            "variant": "multilingual_large_ctc",
+            "segmentation_model": "/home/text-generation/models/whisper/gigaAM-v3/segmentation"
         }
     },
 
@@ -25,6 +30,10 @@
     "audio_rate": 16000,
     "enable_history": true,
     "max_history_days": 30,
+    "max_concurrent_inference": 1,
+    "shutdown_timeout_s": 30,
+    "transcription_timeout_s": 300,
+    "channel_timeout_s": 300,
     "file_validation": {
         "max_file_size_mb": 500,
         "allowed_extensions": [".wav", ".mp3", ".ogg", ".flac", ".m4a", ".oga", ".aac", ".webm", ".3gp", ".opus"],

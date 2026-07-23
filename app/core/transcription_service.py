@@ -1,15 +1,16 @@
 """
-Модуль transcription_service.py содержит класс TranscriptionService,
-который отвечает за транскрибацию аудиофайлов.
+Модуль transcription_service.py — сервис транскрибации аудиофайлов.
+Таймаут реализован через threading.Thread + Event (Semaphore в транскрайберах
+контролирует параллелизм).
 """
 
-import json
-import os
 import time
+import threading
 import traceback
 from typing import Dict, Tuple
 import logging
 
+from .config import AppConfig
 from ..history import save_history
 
 logger = logging.getLogger('app.transcription_service')
@@ -18,7 +19,7 @@ logger = logging.getLogger('app.transcription_service')
 class TranscriptionService:
     """Сервис для транскрибации аудиофайлов."""
 
-    def __init__(self, transcriber, config: Dict):
+    def __init__(self, transcriber, config: AppConfig):
         self.transcriber = transcriber
         self.config = config
 
@@ -35,44 +36,61 @@ class TranscriptionService:
             Кортеж (JSON-ответ, HTTP-код).
         """
         params = params or {}
-        language = params.get('language') or self.config.get('language', 'en')
+        language = params.get('language') or self.config.model.get('language', 'en')
         temperature = max(0.0, min(1.0, float(params.get('temperature', 0.0))))
         prompt = params.get('prompt', '')
 
-        # Проверяем, запрошены ли временные метки
-        return_timestamps = params.get('return_timestamps', self.config.get('return_timestamps', False))
+        return_timestamps = params.get('return_timestamps', self.config.return_timestamps)
         if isinstance(return_timestamps, str):
             return_timestamps = return_timestamps.lower() in ('true', 't', 'yes', 'y', '1')
 
         try:
             start_time = time.time()
-            result, duration = self.transcriber.process_file(
-                file_path, return_timestamps=return_timestamps,
-                language=language, temperature=temperature,
-                prompt=prompt
-            )
+            timeout = self.config.transcription_timeout_s
+
+            result_box = [None, None]
+            done = threading.Event()
+
+            def _run():
+                try:
+                    result_box[0] = self.transcriber.process_file(
+                        file_path, return_timestamps=return_timestamps,
+                        language=language, temperature=temperature,
+                        prompt=prompt
+                    )
+                except Exception as exc:
+                    result_box[1] = exc
+                finally:
+                    done.set()
+
+            worker = threading.Thread(target=_run, daemon=True)
+            worker.start()
+
+            if not done.wait(timeout=timeout):
+                logger.error("Транскрибация превысила таймаут %ds: %s", timeout, filename)
+                return {"error": f"Transcription timed out after {timeout}s"}, 504
+
+            if result_box[1] is not None:
+                raise result_box[1]
+
+            result, duration = result_box[0]
             processing_time = time.time() - start_time
 
-            # Формируем ответ
             if return_timestamps:
                 response = {
                     "segments": result.get("segments", []),
                     "text": result.get("text", ""),
                     "processing_time": processing_time,
-                    "response_size_bytes": 0,
                     "duration_seconds": duration,
-                    "model": os.path.basename(self.config["model_path"])
+                    "model": self.config.model_type
                 }
             else:
                 response = {
                     "text": result,
                     "processing_time": processing_time,
-                    "response_size_bytes": 0,
                     "duration_seconds": duration,
-                    "model": os.path.basename(self.config["model_path"])
+                    "model": self.config.model_type
                 }
-
-            response["response_size_bytes"] = len(json.dumps(response, ensure_ascii=False).encode('utf-8'))
 
             save_history(response, filename, self.config)
             return response, 200

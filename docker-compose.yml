@@ -8,6 +8,7 @@ services:
     volumes:
       - .:/app                                                          # код — обновление без пересборки
       - /home/text-generation/models:/home/text-generation/models:ro   # модели
+      - whisper-logs:/app/logs                                          # логи переживают пересоздание контейнера
     deploy:
       resources:
         reservations:
@@ -15,3 +16,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+
+volumes:
+  whisper-logs:

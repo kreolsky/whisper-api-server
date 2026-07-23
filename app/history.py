@@ -8,28 +8,34 @@ import shutil
 import datetime
 import random
 import string
+import threading
 from typing import Dict, Any, Optional
 import logging
 
+from .core.config import AppConfig
+
 logger = logging.getLogger('app.history')
 
-# Корневая директория истории (относительно корня проекта)
 _history_root = os.path.join(os.path.dirname(os.path.dirname(__file__)), "history")
 
+_cleanup_lock = threading.Lock()
+_cleanup_counter = 0
+_CLEANUP_INTERVAL = 100
 
-def save_history(result: Dict[str, Any], original_filename: str, config: Dict) -> Optional[str]:
+
+def save_history(result: Dict[str, Any], original_filename: str, config: AppConfig) -> Optional[str]:
     """
     Сохраняет результат транскрибации в файл истории.
 
     Args:
         result: Результат транскрибации.
         original_filename: Исходное имя аудиофайла.
-        config: Конфигурация (проверяется enable_history).
+        config: Типизированная конфигурация.
 
     Returns:
         Путь к сохранённому файлу или None.
     """
-    if not config.get("enable_history", False):
+    if not config.enable_history:
         return None
 
     try:
@@ -50,7 +56,18 @@ def save_history(result: Dict[str, Any], original_filename: str, config: Dict) -
             json.dump(result, f, ensure_ascii=False, indent=2)
 
         logger.info("Результат сохранён в историю: %s", history_path)
-        _cleanup_old_history(config)
+
+        should_cleanup = False
+        with _cleanup_lock:
+            global _cleanup_counter
+            _cleanup_counter += 1
+            if _cleanup_counter >= _CLEANUP_INTERVAL:
+                _cleanup_counter = 0
+                should_cleanup = True
+
+        if should_cleanup:
+            _cleanup_old_history(config)
+
         return history_path
 
     except Exception as e:
@@ -58,14 +75,14 @@ def save_history(result: Dict[str, Any], original_filename: str, config: Dict) -
         return None
 
 
-def _cleanup_old_history(config: Dict) -> None:
+def _cleanup_old_history(config: AppConfig) -> None:
     """
     Удаляет директории истории старше max_history_days дней.
 
     Args:
-        config: Конфигурация (проверяется max_history_days).
+        config: Типизированная конфигурация.
     """
-    max_days = config.get("max_history_days", 30)
+    max_days = config.max_history_days
     if max_days <= 0:
         return
 
@@ -77,7 +94,6 @@ def _cleanup_old_history(config: Dict) -> None:
             entry_path = os.path.join(_history_root, entry)
             if not os.path.isdir(entry_path):
                 continue
-            # Директории имеют формат YYYY-MM-DD
             if len(entry) == 10 and entry < cutoff_str:
                 shutil.rmtree(entry_path, ignore_errors=True)
                 logger.info("Удалена старая директория истории: %s", entry)

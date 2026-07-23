@@ -1,8 +1,6 @@
 """
-Модуль gigaam_transcriber.py содержит класс GigaAMTranscriber для транскрибации
-аудиофайлов с помощью модели GigaAM-v3 (Conformer-based ASR).
-GigaAM самостоятельно обрабатывает аудио через ffmpeg, поэтому AudioProcessor
-(sox-нормализация, добавление тишины) не используется.
+Модуль gigaam_transcriber.py — транскрайбер на основе GigaAM-v3.
+GigaAM самостоятельно обрабатывает аудио через ffmpeg, AudioProcessor не используется.
 """
 
 import os
@@ -12,44 +10,52 @@ import traceback
 from typing import Dict, Tuple, Union
 import logging
 
+from .registry import register_model
+from .config import AppConfig
 from ..audio.utils import get_audio_duration
 
 logger = logging.getLogger('app.gigaam_transcriber')
 
-# Порог длительности аудио (секунды), выше которого используется transcribe_longform
-_LONGFORM_THRESHOLD_S = 25
 
-
+@register_model("gigaam")
+@register_model("gigaam-multilingual")
 class GigaAMTranscriber:
     """
     Класс для распознавания речи с помощью модели GigaAM.
 
     Attributes:
-        config (Dict): Словарь с параметрами конфигурации.
-        model_path (str): Идентификатор модели для gigaam.load_model().
+        config (AppConfig): Типизированная конфигурация приложения.
+        variant (str): Идентификатор модели для gigaam.load_model().
         return_timestamps (bool): Флаг возврата временных меток по умолчанию.
     """
 
-    def __init__(self, config: Dict):
+    def __init__(self, config: AppConfig):
         """
         Инициализация транскрайбера GigaAM.
 
         Args:
-            config: Словарь с параметрами конфигурации.
+            config: Типизированная конфигурация приложения.
         """
         self.config = config
-        self.model_path = config.get("variant", "v3_e2e_rnnt")
-        self.return_timestamps = config.get("return_timestamps", False)
+        model_config = config.model
+        self.variant = model_config.get("variant", "v3_e2e_rnnt")
+        self.return_timestamps = config.return_timestamps
+        self._longform_threshold_s = config.longform_threshold_s
 
-        # Lock для потокобезопасного доступа к модели —
-        # Waitress обслуживает запросы в нескольких потоках
-        self._inference_lock = threading.Lock()
+        max_concurrent = config.max_concurrent_inference
+        self._inference_lock = threading.Semaphore(max_concurrent)
 
-        # Флаг для однократного предупреждения об игнорируемых параметрах
         self._warned_ignored_params = False
 
-        # Загружаем модель при инициализации
+        self.model = None
+        self._model_loaded = False
+
         self._load_model()
+        self._model_loaded = True
+
+    @property
+    def is_ready(self) -> bool:
+        return self._model_loaded and self.model is not None
 
     def _load_model(self) -> None:
         """
@@ -59,55 +65,35 @@ class GigaAMTranscriber:
             Exception: Если не удалось загрузить модель.
         """
         import gigaam
-        import gigaam.preprocess as gigaam_preprocess
-        from subprocess import CalledProcessError
 
-        logger.info("Загрузка модели GigaAM: %s", self.model_path)
-
-        # Патчим load_audio: оригинал теряет stderr от ffmpeg при ошибке,
-        # что делает невозможной диагностику проблем с аудиофайлами.
-        _original_load_audio = gigaam_preprocess.load_audio
-
-        def _load_audio_with_logging(audio_path, sample_rate=gigaam_preprocess.SAMPLE_RATE):
-            try:
-                return _original_load_audio(audio_path, sample_rate)
-            except RuntimeError as e:
-                cause = e.__cause__
-                if isinstance(cause, CalledProcessError):
-                    stderr = cause.stderr.decode("utf-8", errors="replace") if cause.stderr else "(пусто)"
-                    logger.error(
-                        "ffmpeg не смог декодировать '%s' (exit code %d). stderr:\n%s",
-                        audio_path, cause.returncode, stderr
-                    )
-                raise
-
-        gigaam_preprocess.load_audio = _load_audio_with_logging
+        logger.info("Загрузка модели GigaAM: %s", self.variant)
 
         try:
-            self.model = gigaam.load_model(self.model_path)
+            from .gigaam_patches import patch_load_audio
+            patch_load_audio()
+        except Exception as e:
+            raise RuntimeError(f"Ошибка при патчинге gigaam.load_audio (возможно, несовместимая версия gigaam): {e}") from e
+
+        try:
+            self.model = gigaam.load_model(self.variant)
             logger.info("Модель GigaAM успешно загружена и готова к использованию")
         except Exception as e:
             logger.error("Ошибка при загрузке модели GigaAM: %s", e)
             raise
 
-        # Инициализация VAD-пайплайна для longform из явного пути
-        segmentation_path = self.config.get("segmentation_model")
+        segmentation_path = self.config.model.get("segmentation_model")
         if segmentation_path:
             self._init_vad_pipeline(segmentation_path)
 
     def _init_vad_pipeline(self, model_path: str) -> None:
         """
         Инициализация pyannote VAD-пайплайна из локального пути к модели.
-        Также патчит segment_audio_file, чтобы передавать аудио как waveform —
-        это обходит зависимость pyannote 4.x от torchcodec для декодирования файлов.
         """
         os.environ["PYANNOTE_METRICS_ENABLED"] = "0"
 
         import gigaam.vad_utils as vad_utils
-        from gigaam.preprocess import load_audio as gigaam_load_audio, SAMPLE_RATE
         from pyannote.audio import Model
         from pyannote.audio.pipelines import VoiceActivityDetection
-        import torch
 
         logger.info("Загрузка модели сегментации из: %s", model_path)
         try:
@@ -120,62 +106,11 @@ class GigaAMTranscriber:
             logger.error("Ошибка при загрузке модели сегментации: %s", e)
             raise
 
-        # Патчим segment_audio_file: pyannote 4.x требует torchcodec для чтения файлов,
-        # но torchcodec не работает с conda-окружением из-за старого GCC runtime.
-        # Вместо этого загружаем аудио через ffmpeg (GigaAM preprocess) и передаём
-        # в pipeline как waveform dict — pyannote принимает такой формат напрямую.
-        def _patched_segment_audio_file(wav_file, sr, device=torch.device("cpu"), **kwargs):
-            audio = gigaam_load_audio(wav_file)
-            vad_pipeline = vad_utils.get_pipeline(device)
-            waveform_dict = {"waveform": audio.unsqueeze(0), "sample_rate": SAMPLE_RATE}
-            sad_segments = vad_pipeline(waveform_dict)
-
-            # Остальная логика чанкинга — из оригинальной функции
-            max_duration = kwargs.get("max_duration", 22.0)
-            min_duration = kwargs.get("min_duration", 15.0)
-            strict_limit_duration = kwargs.get("strict_limit_duration", 30.0)
-            new_chunk_threshold = kwargs.get("new_chunk_threshold", 0.2)
-
-            segments = []
-            boundaries = []
-            curr_duration = 0.0
-            curr_start = 0.0
-            curr_end = 0.0
-
-            def _update_segments(cs, ce, cd):
-                if cd > strict_limit_duration:
-                    max_segs = int(cd / strict_limit_duration) + 1
-                    seg_dur = cd / max_segs
-                    ce_local = cs + seg_dur
-                    for _ in range(max_segs - 1):
-                        segments.append(audio[int(cs * sr): int(ce_local * sr)])
-                        boundaries.append((cs, ce_local))
-                        cs = ce_local
-                        ce_local += seg_dur
-                segments.append(audio[int(cs * sr): int(ce * sr)])
-                boundaries.append((cs, ce))
-
-            for segment in sad_segments.get_timeline().support():
-                start = max(0, segment.start)
-                end = min(audio.shape[0] / sr, segment.end)
-                if curr_duration == 0.0:
-                    curr_start = start
-                elif curr_duration > new_chunk_threshold and (
-                    curr_duration + (end - curr_end) > max_duration
-                    or curr_duration > min_duration
-                ):
-                    _update_segments(curr_start, curr_end, curr_duration)
-                    curr_start = start
-                curr_end = end
-                curr_duration = curr_end - curr_start
-
-            if curr_duration > new_chunk_threshold:
-                _update_segments(curr_start, curr_end, curr_duration)
-
-            return segments, boundaries
-
-        vad_utils.segment_audio_file = _patched_segment_audio_file
-        logger.info("segment_audio_file пропатчен для обхода torchcodec")
+        try:
+            from .gigaam_patches import patch_segment_audio_file
+            patch_segment_audio_file()
+        except Exception as e:
+            raise RuntimeError(f"Ошибка при патчинге segment_audio_file: {e}") from e
 
     def _warn_ignored_params(self, language: str = None, temperature: float = None,
                              prompt: str = None) -> None:
@@ -223,7 +158,7 @@ class GigaAMTranscriber:
         try:
             # Определяем длительность для выбора метода транскрибации
             duration = _duration if _duration is not None else get_audio_duration(audio_path)
-            use_longform = duration > _LONGFORM_THRESHOLD_S
+            use_longform = duration > self._longform_threshold_s
 
             with self._inference_lock:
                 if use_longform:
@@ -356,7 +291,7 @@ class GigaAMTranscriber:
             duration = get_audio_duration(input_path)
         except Exception as e:
             logger.warning("Не удалось определить длительность: %s. Используем transcribe_longform", e)
-            duration = _LONGFORM_THRESHOLD_S + 1
+            duration = self._longform_threshold_s + 1
             duration_known = False
 
         # Транскрибация (GigaAM сам загружает и обрабатывает аудио)
