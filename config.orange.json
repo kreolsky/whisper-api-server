@@ -1,0 +1,54 @@
+{
+    "version": "1.0.0",
+    "model_type": "gigaam",
+    "loaded_models": ["gigaam", "gigaam-multilingual"],
+    "models": {
+        "whisper": {
+            "model_path": "/home/text-generation/models/whisper/antony-ties-podlodka-v1.2",
+            "language": "russian",
+            "chunk_length_s": 28,
+            "batch_size": 6,
+            "max_new_tokens": 384,
+            "temperature": 0.01,
+            "device_id": 1,
+            "norm_level": "-0.55",
+            "compand_params": "0.3,1 -90,-90,-70,-50,-40,-15,0,0 -7 0 0.15"
+        },
+        "gigaam": {
+            "model_path": "/home/text-generation/models/whisper/gigaAM-v3",
+            "variant": "v3_e2e_rnnt",
+            "device_id": 0,
+            "segmentation_model": "/home/text-generation/models/whisper/gigaAM-v3/segmentation"
+        },
+        "gigaam-multilingual": {
+            "variant": "multilingual_large_ctc",
+            "device_id": 1,
+            "segmentation_model": "/home/text-generation/models/whisper/gigaAM-multilingual/segmentation"
+        }
+    },
+    "service_port": 5042,
+    "return_timestamps": false,
+    "audio_rate": 16000,
+    "enable_history": true,
+    "max_history_days": 30,
+    "max_concurrent_inference": 1,
+    "shutdown_timeout_s": 30,
+    "transcription_timeout_s": 300,
+    "channel_timeout_s": 300,
+    "file_validation": {
+        "max_file_size_mb": 500,
+        "allowed_extensions": [
+            ".wav", ".mp3", ".ogg", ".flac", ".m4a", ".oga", ".aac",
+            ".webm", ".3gp", ".opus"
+        ],
+        "allowed_mime_types": [
+            "audio/wav", "audio/mpeg", "audio/ogg", "audio/flac",
+            "audio/mp4", "audio/aac", "audio/webm", "audio/opus"
+        ]
+    },
+    "log_level": "INFO",
+    "log_file": "logs/whisper_api.log",
+    "request_logging": {
+        "exclude_endpoints": ["/health", "/static"]
+    }
+}

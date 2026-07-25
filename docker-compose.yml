@@ -3,6 +3,10 @@ services:
     build: .
     image: whisper-api:latest
     restart: unless-stopped
+    # Prod-конфиг вынесен в отдельный version-контролируемый файл; generic
+    # config.json остаётся эталоном/дефолтом для dev. Команда переопределяет
+    # CMD из Dockerfile.
+    command: ["python", "server.py", "--config", "config.orange.json"]
     ports:
       - "5042:5042"
     environment:
@@ -13,7 +17,7 @@ services:
     volumes:
       - .:/app                                                          # код — обновление без пересборки
       - /home/text-generation/models:/home/text-generation/models:ro   # модели (whisper, сегментация)
-      - /home/serge/.cache/gigaam:/root/.cache/gigaam                  # веса gigaam (rnnt + multilingual_large_ctc)
+      - /home/text-generation/.cache/gigaam:/root/.cache/gigaam        # веса gigaam (символическая ссылка на реальный кэш на хосте)
       - whisper-logs:/app/logs                                          # логи переживают пересоздание контейнера
     deploy:
       resources:

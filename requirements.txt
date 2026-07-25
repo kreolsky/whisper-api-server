@@ -23,5 +23,5 @@ python-magic==0.4.27
 requests==2.32.3
 
 # GigaAM + pyannote (для model_type=gigaam, longform VAD)
-gigaam @ git+https://github.com/salute-developers/GigaAM.git
+gigaam @ git+https://github.com/salute-developers/GigaAM.git@559d88d6b72541412743929f633a6ae7c9950b85
 pyannote-audio==4.0.4

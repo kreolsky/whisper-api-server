@@ -50,6 +50,16 @@ class Routes:
         finally:
             cleanup_temp_files([temp_path])
 
+    @staticmethod
+    def _model_info(model_id: str) -> Dict:
+        """Унифицированное описание модели для /v1/models и /v1/models/<id>."""
+        return {
+            "id": model_id,
+            "object": "model",
+            "owned_by": "ai-sage" if model_id.startswith("gigaam") else "openai",
+            "permissions": [],
+        }
+
     def _register_routes(self) -> None:
         @self.app.route('/', methods=['GET'])
         def index():
@@ -78,24 +88,14 @@ class Routes:
             """Эндпоинт для получения списка доступных (загруженных) моделей."""
             data = []
             for model_id in self.model_manager.available():
-                data.append({
-                    "id": model_id,
-                    "object": "model",
-                    "owned_by": "ai-sage" if model_id.startswith("gigaam") else "openai",
-                    "permissions": []
-                })
+                data.append(self._model_info(model_id))
             return jsonify({"data": data, "object": "list"}), 200
 
         @self.app.route('/v1/models/<model_id>', methods=['GET'])
         def retrieve_model(model_id):
             """Эндпоинт для получения информации о конкретной модели."""
             if model_id in self.model_manager.available():
-                return jsonify({
-                    "id": model_id,
-                    "object": "model",
-                    "owned_by": "ai-sage" if model_id.startswith("gigaam") else "openai",
-                    "permissions": []
-                }), 200
+                return jsonify(self._model_info(model_id)), 200
             return jsonify({
                 "error": "Model not found",
                 "details": {

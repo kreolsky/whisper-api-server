@@ -621,3 +621,63 @@ class TestResolveDevice:
         with patch.object(device_mod, "torch") as mock_torch:
             self._patch_cuda(mock_torch, available=False, count=0)
             assert device_mod.resolve_device({}) == "cpu"
+
+
+class TestModelManagerGracefulDegradation:
+    """Graceful degradation в ModelManager.__init__ (без реальных моделей)."""
+
+    def _config(self, loaded):
+        return AppConfig(
+            model_type=loaded[0],
+            models={n: {} for n in loaded},
+            loaded_models=loaded,
+            enable_history=False,
+        )
+
+    def test_one_model_fails_other_loads(self):
+        from app.core.model_manager import ModelManager
+
+        config = self._config(["a", "b"])
+        good_a = MagicMock()
+        good_a.is_ready = True
+
+        def fake_create(cfg):
+            if cfg.model_type == "b":
+                raise RuntimeError("oom")
+            return good_a
+
+        with patch("app.core.create_transcriber", side_effect=fake_create):
+            mgr = ModelManager(config)
+
+        assert set(mgr.available()) == {"a"}
+        assert set(mgr._failed) == {"b"}
+        name, t = mgr.resolve(None)
+        assert name == "a" and t is good_a
+        # запрос к упавшей модели откатывается на default
+        assert mgr.resolve("b")[0] == "a"
+
+    def test_all_fail_raises(self):
+        from app.core.model_manager import ModelManager
+
+        config = self._config(["a", "b"])
+        with patch("app.core.create_transcriber", side_effect=RuntimeError("boom")):
+            with pytest.raises(RuntimeError, match="ни одну модель"):
+                ModelManager(config)
+
+    def test_default_failed_falls_back_to_loaded(self):
+        from app.core.model_manager import ModelManager
+
+        config = self._config(["a", "b"])  # default = "a"
+        good_b = MagicMock()
+        good_b.is_ready = True
+
+        def fake_create(cfg):
+            if cfg.model_type == "a":
+                raise RuntimeError("oom")
+            return good_b
+
+        with patch("app.core.create_transcriber", side_effect=fake_create):
+            mgr = ModelManager(config)
+
+        assert mgr.default_name == "b"
+        assert mgr.resolve(None)[0] == "b"
