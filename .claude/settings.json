@@ -1,20 +1,88 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git -C /Users/serge/Develop/nnp-whisper-api-server log --oneline -10 --all)",
-      "Bash(git -C /Users/serge/Develop/nnp-whisper-api-server log --oneline main..cleanup/dead-code)",
       "Bash(ssh orange:*)",
+      "Bash(ssh root@orange \"systemctl status whisper.service --no-pager\")",
+      "Bash(ssh root@orange \"systemctl restart whisper.service\")",
       "Bash(curl -s http://stt.ai.gray/health)",
       "Bash(curl -s http://stt.ai.gray/v1/models)",
-      "Bash(scp app/audio/processor.py orange:/home/text-generation/servers/whisper-api/app/audio/processor.py)",
-      "Bash(scp app/core/transcriber.py orange:/home/text-generation/servers/whisper-api/app/core/transcriber.py)",
-      "Bash(scp app/core/transcription_service.py orange:/home/text-generation/servers/whisper-api/app/core/transcription_service.py)",
-      "Bash(ssh root@orange \"systemctl status whisper.service\")",
-      "Bash(scp app/infrastructure/validation.py orange:/home/text-generation/servers/whisper-api/app/infrastructure/validation.py)",
-      "Bash(ssh root@orange \"systemctl status whisper.service --no-pager\")",
       "Bash(git add:*)",
       "Bash(git commit -m ':*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(git fetch:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git status:*)",
+      "Bash(ruff check:*)",
+      "Bash(ruff format:*)",
+      "Bash(python -m py_compile:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'CMD=\"$CLAUDE_TOOL_INPUT\"; if echo \"$CMD\" | grep -qE \"rm\\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\\b\" && ! echo \"$CMD\" | grep -qE \"rm\\s+-[a-zA-Z]+\\s+\\S*(node_modules|__pycache__|\\.cache|\\.pytest_cache|\\.ruff_cache)\"; then echo \"BLOCKED: rm -rf is destructive. Use targeted removal.\" >&2; exit 1; fi'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'CMD=\"$CLAUDE_TOOL_INPUT\"; if echo \"$CMD\" | grep -qE \"git\\s+push\\s+.*--force\"; then echo \"BLOCKED: force push. Rebase and push normally, or ask the user.\" >&2; exit 1; fi'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'CMD=\"$CLAUDE_TOOL_INPUT\"; if echo \"$CMD\" | grep -qE \"systemctl\\s+(stop|disable)\\s+(--\\S+\\s+)*whisper\"; then echo \"BLOCKED: stopping/disabling whisper.service takes prod STT down. Use restart, or ask the user first.\" >&2; exit 1; fi'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'CMD=\"$CLAUDE_TOOL_INPUT\"; echo \"$CMD\" | grep -q \"config.json\" || exit 0; if echo \"$CMD\" | grep -qE \"scp\\s+\\S*config\\.json|(ssh|orange).*(>\\s*config\\.json|sed\\s+-i.*config\\.json|tee\\s+.*config\\.json|rm\\s+.*config\\.json)\"; then echo \"BLOCKED: the server config.json legitimately differs from the local one (see /deploy). Never overwrite it as part of a deploy.\" >&2; exit 1; fi'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'CMD=\"$CLAUDE_TOOL_INPUT\"; if echo \"$CMD\" | grep -qE \"scp\\s+\\S*app/\"; then echo \"{\\\"systemMessage\\\": \\\"Deploy is git pull on the server, not scp (see /deploy skill). Copying app/ files by hand desyncs the server from git.\\\"}\"; fi'"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'F=\"$CLAUDE_FILE_PATH\"; R=\"\"; case \"$F\" in */app/audio/*) R=\"audio.md\";; */app/core/*) R=\"transcribers.md\";; */app/routes.py|*/app/infrastructure/validation.py) R=\"api.md\";; esac; [ -z \"$R\" ] && exit 0; K=$(echo \"$R\" | tr -d \" .\"); M=\"/tmp/.whisper-rules-$K-${CLAUDE_SESSION_ID:-$(date +%j)}\"; [ -f \"$M\" ] && exit 0; touch \"$M\"; echo \"{\\\"systemMessage\\\": \\\"Path-scoped rules apply — READ .claude/rules-scoped/$R (reminder fires once per session).\\\"}\"'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'F=\"$CLAUDE_FILE_PATH\"; case \"$F\" in *.py) ;; *) exit 0;; esac; command -v ruff >/dev/null 2>&1 || exit 0; ruff format \"$F\" >/dev/null 2>&1'"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'echo \"=== Git ===\"; git status --short; echo; git log --oneline -5'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'git fetch origin 2>/dev/null; BEHIND=$(git log HEAD..origin/dev --oneline 2>/dev/null); if [ -n \"$BEHIND\" ]; then echo; echo \"=== WARNING: dev is behind origin ===\"; echo \"$BEHIND\"; echo \"Run: git rebase origin/dev\"; fi'"
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'echo; echo \"=== whisper.service (orange) ===\"; curl -s --max-time 5 http://stt.ai.gray/health || echo \"health check unreachable\"; echo'"
+          }
+        ]
+      }
     ]
   }
 }

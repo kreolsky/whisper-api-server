@@ -1,64 +1,56 @@
-# Development Rules
+# Development Rules — Index
 
-Living document. Updated after each session.
+**Two tiers.** `.claude/rules/` is injected into every session — only process-wide rules live
+there, keep it lean. `.claude/rules-scoped/` is NOT auto-loaded: each file is read on demand
+when its path trigger fires (a PreToolUse hook reminds once per session on the first matching
+edit). One concept = one file; pointers, not restatement.
 
-## Hard Rules
+## Always loaded (`.claude/rules/`)
 
-Non-negotiable. Violation = stop and fix before continuing.
+- **`workflow.md`** — sizing (S/M/L) + model-choice axis, review gate, reality-facing
+  acceptance, self-review, error-recovery ladder, **debugging intake**, hard rules,
+  auto-lessons. *Single source of truth for the process.*
+- **`coding-constraints.md`** — stdlib preference, no over-engineering, crash-on-missing-config,
+  surgical changes, read-the-entry-file, anti-mirage validation.
+- **`testing.md`** — where tests run (orange, over ssh) and why a green run is not evidence.
+- **`documentation.md`** — `INVARIANT:`+`Why:` and `WHY:` markers, doc tiers, decision pinning.
+- **`git-strategy.md`** — S/M straight to `dev`, branch only for L, pre-merge audit,
+  `dev→main` only on explicit request.
 
-* Branch freshness: Run `git fetch origin && git log HEAD..origin/dev --oneline` before work. Rebase if non-empty.
-* Post-refactor verification: Verify all imports compile (`python -m py_compile <file>`) after dependency changes.
-* Impact assessment: Ask how changes affect the rest of the project before implementation.
-* 3+ Iteration Pivot: If a problem requires 3+ iterative fixes, propose a radical architectural simplification.
-* Dependency removal audit: `grep -r 'import.*package'` all consumers, verify replacement covers every use case before removing.
+## On demand (`.claude/rules-scoped/`) — READ BEFORE editing matching paths
 
-## Git Strategy
+| Trigger (files you are about to touch) | Read first |
+|---|---|
+| `app/audio/**` | `audio.md` — pipeline order, ffmpeg/sox return codes, temp files, format trap |
+| `app/routes.py`, `app/infrastructure/validation.py` | `api.md` — route rules, OpenAI contract, validation |
+| `app/core/**` | `transcribers.md` — registry/Protocol, adding a backend, concurrency, device fallback |
 
-* **Branch First**: Create feature branch from `dev` for multi-file or non-trivial changes. Minor features (single-concern, <=3 files) may be committed directly to `dev`. Never work directly on `main`.
-* **Base Branch**: `dev` contains latest stable changes. Always branch from `dev`.
-* **Release**: `dev` merged into `main` for production. Never push directly to `main`.
-* **Clean Up**: Delete feature branches after merge into `dev`.
+## Skills (invoke via `/command`)
 
-## Coding Constraints
+- `/deploy` — deploy, restart, status, logs, rollback on orange (systemd `whisper.service`).
+- `/review` — post-implementation self-review. Presents findings; never auto-fixes.
+- `/retro` — session retrospective; writes a lesson only when a trigger fired.
 
-* Use standard library and framework built-ins. No custom algorithms when a one-liner exists.
-* No over-engineering, no redundant abstractions. Simplest tool for the job.
-* No nested conditional chains. Use lookup dictionaries and early returns.
-* Crash on missing configs/dependencies. No default values for critical data (model_path, language).
-* Semantic naming and strict type hints mandatory.
-* Extract shared utilities only for genuinely reusable operations.
-* All code comments and docstrings in Russian (project convention).
+## Artifacts
 
-## Testing
+- `lessons/` — actionable rules extracted from real iterations (triggers in `workflow.md`).
+  Flat folder, no index script. Each lesson's rule gets folded into the matching rules file.
+- `.kilo/plans/` — implementation plans.
 
-* No formal test suite yet. Verify changes with:
-  - `python -m py_compile <file>` for syntax/import checks on each modified file.
-  - `python -c "from app import WhisperServiceAPI"` for full import chain validation.
-  - Manual API testing via web UI or curl against running server.
+## Tooling
 
-## Self-Review (after 3+ file changes)
+- **Format/lint**: `ruff` (config in `pyproject.toml`, line-length 120). Formatting runs
+  automatically on every edit via a PostToolUse hook; lint manually with `ruff check app/`.
+- **Tests**: on orange over ssh — see `testing.md`.
 
-1. `git diff --stat` -- verify only expected files changed.
-2. Full diff review -- incomplete guards, duplicated literals, formatting.
-3. Grep for old names after renames.
-4. `python -m py_compile` on every modified `.py` file.
+## Environment facts
 
-## Audio Processing Rules
+- Prod: host `orange`, systemd unit `whisper.service`, port 5042, `http://stt.ai.gray`.
+  Restart requires `root@orange`. Docker exists in the repo but is **not** the active runtime.
+- Never edit `config.json` on the server — it legitimately differs from the local copy.
 
-* FFmpeg and SoX are external dependencies. Always check subprocess return codes.
-* Temp files must be created via `create_temp_file()` from `app/infrastructure/storage.py` -- never raw `tempfile.mktemp`.
-* Audio pipeline order matters: convert to WAV 16kHz -> normalize -> compress/expand -> add silence.
+## Owed
 
-## Flask / API Rules
-
-* New endpoints go in `app/routes.py` inside `_register_routes()`.
-* All transcription endpoints delegate to `TranscriptionService.transcribe()`.
-* New audio input methods: add a `get_*_file()` function in `sources.py` returning `(temp_path, filename, error)`.
-* File validation runs through `FileValidator` -- never validate inline in routes.
-* Configuration values accessed via `self.config.get()` with sensible defaults, except critical params which must crash if missing.
-
-## Deploy
-
-* Server: `ssh orange`, path `/home/text-generation/servers/whisper-api`
-* Обновление: `git push` → `ssh orange "cd /home/text-generation/servers/whisper-api && git pull"` → перезапуск сервиса через systemd (`whisper.service`)
-* Проверка: `ssh orange "curl -s http://localhost:5042/health"`
+- `/reality-audit` — a lore-style skill that verifies this file and `CLAUDE.md` against actual
+  code (~monthly). Not written yet; the 2026-07-25 config overhaul served as the first audit
+  and found four drifted claims.

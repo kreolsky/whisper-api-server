@@ -1,0 +1,19 @@
+[tool.ruff]
+# 120, а не дефолтные 88: p95 существующих строк ~112 символов.
+# Более узкий лимит переформатировал бы почти каждый файл при первом касании.
+line-length = 120
+target-version = "py312"
+exclude = ["history", "temp", "static"]
+
+[tool.ruff.format]
+# Двойные кавычки — доминирующий стиль в коде (1513 против 202).
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint]
+# E501 (длина строки) выключен: за неё отвечает форматтер.
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

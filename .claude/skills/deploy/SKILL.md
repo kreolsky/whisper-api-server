@@ -9,105 +9,145 @@ description: >
 
 # deploy: Деплой Whisper API на сервер Orange
 
-## Инфраструктура
+## Инфраструктура (актуальное состояние)
 
 **Хост:** `orange` (10.10.1.20) -- bare metal, NVIDIA RTX 3090
 **Путь на сервере:** `/home/text-generation/servers/whisper-api`
-**Рантайм:** Docker + NVIDIA Container Toolkit
-**Compose-файл:** `docker-compose.yml` в корне проекта
-**Порт:** 5042
-**Код:** монтируется как volume (`.:/app`) — rebuild не нужен при изменениях кода
+**Рантайм:** systemd-юнит `whisper.service` (НЕ Docker -- см. раздел «Будущее» внизу)
+**Python:** `/home/serge/.miniconda/envs/whisper-api/bin/python` (conda-окружение `whisper-api`)
+**Порт:** 5042, внешний адрес `http://stt.ai.gray`
 
-## SSH-доступ
+Юнит (`/etc/systemd/system/whisper.service`), проверено:
+
+```
+WorkingDirectory=/home/text-generation/servers/whisper-api
+ExecStart=/home/serge/.miniconda/envs/whisper-api/bin/python .../server.py --config config.json
+Environment="HOME=/home/serge"
+Environment="LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libstdc++.so.6"
+Restart=on-failure
+```
+
+`LD_PRELOAD` обязателен -- при ручном запуске без него импорт падает.
+
+## SSH-доступ и права
 
 ```bash
-ssh orange         # обычный доступ: читать файлы, смотреть логи, docker команды
-ssh root@orange    # если нужны права root
+ssh orange         # чтение: git pull, systemctl status, journalctl, тесты
+ssh root@orange    # ОБЯЗАТЕЛЕН для restart/stop/start
 ```
+
+Проверено: `systemctl restart` из-под обычного пользователя падает с
+`Interactive authentication required`. Чтение статуса и логов -- работает без root.
 
 ## Поведенческие правила
 
-- **Деплой = git pull на сервере** -- не копируем файлы через scp, сервер сам тянет из git
-- **Не трогать config.json на сервере** -- серверный конфиг может отличаться от локального
-- **После деплоя** -- проверить `docker compose ps` и убедиться что контейнер running
-- **requirements.txt изменился** -- нужен `--build`, иначе достаточно `restart`
-- **Модель грузится ~15-30 сек** после старта контейнера, подождать перед проверкой API
+- **Деплой = git pull на сервере** -- не копируем файлы через scp, сервер сам тянет из git.
+- **Не трогать `config.json` на сервере** -- серверный конфиг отличается от локального
+  (на сервере он в состоянии `M`). Изменения конфига обсуждаются отдельно, не в рамках деплоя.
+- **Модель грузится ~15-30 сек** после рестарта -- подождать перед проверкой API.
+- **`requirements.txt` изменился** -- обновить окружение (`server.sh --update`), потом рестарт.
+- **После деплоя** -- проверить `systemctl status` И health-эндпоинт: юнит может быть
+  `active (running)`, пока модель ещё грузится.
 
 ## Процедуры
 
 ### 1. Полный деплой (обновление кода + рестарт)
 
 ```bash
-# Код обновляется через git pull на сервере -- rebuild не нужен
-ssh orange "cd /home/text-generation/servers/whisper-api && git pull && docker compose restart"
+ssh orange "cd /home/text-generation/servers/whisper-api && git pull"
+ssh root@orange "systemctl restart whisper.service"
 
-# Проверить статус (подождать загрузку модели)
-sleep 20
-ssh orange "cd /home/text-generation/servers/whisper-api && docker compose ps"
+sleep 25
+ssh orange "systemctl status whisper.service --no-pager | head -8"
+curl -s http://stt.ai.gray/health
 ```
 
-### 2. Деплой с обновлением зависимостей (requirements.txt изменился)
+### 2. Деплой с обновлением зависимостей
 
 ```bash
-ssh orange "cd /home/text-generation/servers/whisper-api && git pull && docker compose up -d --build"
-
+ssh orange "cd /home/text-generation/servers/whisper-api && git pull && ./server.sh --update"
+ssh root@orange "systemctl restart whisper.service"
 sleep 30
-ssh orange "cd /home/text-generation/servers/whisper-api && docker compose ps"
+curl -s http://stt.ai.gray/health
 ```
 
-### 3. Только рестарт (без обновления кода)
+### 3. Только рестарт
 
 ```bash
-ssh orange "cd /home/text-generation/servers/whisper-api && docker compose restart"
-sleep 20
-ssh orange "cd /home/text-generation/servers/whisper-api && docker compose ps"
+ssh root@orange "systemctl restart whisper.service"
+sleep 25
+curl -s http://stt.ai.gray/health
 ```
 
 ### 4. Проверка статуса
 
 ```bash
-ssh orange "cd /home/text-generation/servers/whisper-api && docker compose ps"
+ssh orange "systemctl status whisper.service --no-pager | head -8"
 ```
 
 ### 5. Логи
 
 ```bash
 # Последние 50 строк
-ssh orange "cd /home/text-generation/servers/whisper-api && docker compose logs --tail=50"
+ssh orange "journalctl -u whisper.service -n 50 --no-pager"
 
 # Реалтайм
-ssh orange "cd /home/text-generation/servers/whisper-api && docker compose logs -f"
+ssh orange "journalctl -u whisper.service -f"
+
+# Только ошибки за сегодня
+ssh orange "journalctl -u whisper.service --since today -p err --no-pager"
 ```
 
 ### 6. Проверка API
 
 ```bash
-# Health check
-curl -s http://orange.lan:5042/v1/models
+curl -s http://stt.ai.gray/health      # {"model":"gigaam","status":"ok","version":"1.0.0"}
+curl -s http://stt.ai.gray/v1/models
 
-# Тест транскрипции
-curl -s -X POST http://orange.lan:5042/v1/audio/transcriptions \
-  -F "file=@test.wav" -F "model=whisper"
+curl -s -X POST http://stt.ai.gray/v1/audio/transcriptions \
+  -F "file=@test.wav" -F "model=gigaam"
 ```
 
 ### 7. Откат
 
 ```bash
-# Откатить код к конкретному коммиту и перезапустить
-ssh orange "cd /home/text-generation/servers/whisper-api && git checkout <commit> && docker compose restart"
+ssh orange "cd /home/text-generation/servers/whisper-api && git checkout <commit>"
+ssh root@orange "systemctl restart whisper.service"
+sleep 25
+curl -s http://stt.ai.gray/health
 ```
 
-## Первоначальная настройка (один раз)
+### 8. Прогон тестов на сервере
 
-Если Docker ещё не развёрнут на сервере:
+Локальное окружение на Mac тесты не тянет (нужны torch/transformers), поэтому сюит гоняется
+на orange -- см. `.claude/rules/testing.md`. Важно: тесты идут по коду, который лежит НА
+СЕРВЕРЕ, то есть после `git pull`, а не по локальному рабочему дереву.
 
 ```bash
-# Убедиться что NVIDIA Container Toolkit установлен
-ssh orange "docker info | grep -i runtime"
+ssh orange "cd /home/text-generation/servers/whisper-api && \
+  /home/serge/.miniconda/envs/whisper-api/bin/python -m pytest tests/ -q"
+```
 
-# Остановить старый systemd сервис
+---
+
+## Будущее: миграция на Docker (ЕЩЁ НЕ АКТИВНО)
+
+В репозитории лежат `Dockerfile` и `docker-compose.yml`, но **прод на них не переведён**.
+Ничего из этого раздела не запускать в рамках обычного деплоя -- на сервере нет запущенных
+контейнеров, команды `docker compose` там работать не будут.
+
+Целевая схема: Docker + NVIDIA Container Toolkit, код монтируется volume'ом (`.:/app`),
+поэтому rebuild нужен только при изменении `requirements.txt`.
+
+Первичная настройка (один раз, при переезде):
+
+```bash
+ssh orange "docker info | grep -i runtime"            # проверить NVIDIA runtime
 ssh root@orange "systemctl disable --now whisper.service"
-
-# Первый билд (долгий: ~10-15 мин)
 ssh orange "cd /home/text-generation/servers/whisper-api && docker compose up -d --build"
 ```
+
+После переезда процедуры 1-7 заменяются на: `git pull && docker compose restart`
+(или `up -d --build` при смене зависимостей), статус -- `docker compose ps`,
+логи -- `docker compose logs --tail=50`. **Этот файл и `.claude/rules/testing.md`
+обновить в том же коммите, что и переезд.**
