@@ -38,7 +38,12 @@ Backends are pluggable, not hardcoded. `app/core/registry.py` holds a name -> cl
 
 ## Deployment
 
-Prod runs on host `orange` as the systemd unit `whisper.service` (**not** Docker -- `Dockerfile`/`docker-compose.yml` exist but the migration has not happened yet). Restart requires root. Full procedures: `/deploy` skill.
+Prod runs on host `orange` (2× RTX 3090) via Docker Compose (`docker-compose.yml`) with the
+NVIDIA Container Toolkit — the unit is `whisper-api-whisper-api-1`. Both GPUs are exposed
+(`count: all`); the gigaam weights cache (`~/.cache/gigaam`) and model dirs are bind-mounted.
+The legacy `whisper.service` systemd unit is kept disabled as a rollback path. Code is mounted
+as a volume (`.:/app`) so most updates need only `git pull && docker compose restart`; a
+`requirements.txt` change needs `--build`. Full procedures: `/deploy` skill.
 
 ## Tests
 
