@@ -1,30 +1,27 @@
-# Conda environment dependencies
+# Conda environment dependencies.
+# Выровнено под prod-окружение (torch 2.11 / CUDA 13 / pyannote 4.0.4).
+# flash_attn намеренно отсутствует: на prod не установлен, whisper не грузится
+# (loaded_models = gigaam + gigaam-multilingual); при загрузке whisper срабатывает
+# штатный откат на стандартное внимание в WhisperTranscriber._load_model.
 
-# Torch
-torch @ https://download.pytorch.org/whl/cu128/torch-2.7.0%2Bcu128-cp313-cp313-manylinux_2_28_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64' and python_version == '3.13'
-torch @ https://download.pytorch.org/whl/cu128/torch-2.7.0%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64' and python_version == '3.12'
-torch @ https://download.pytorch.org/whl/cu128/torch-2.7.0%2Bcu128-cp311-cp311-manylinux_2_28_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64' and python_version == '3.11'
+# Torch + Torchaudio (CUDA 13)
+torch @ https://download.pytorch.org/whl/cu130/torch-2.11.0%2Bcu130-cp313-cp313-manylinux_2_28_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64' and python_version == '3.13'
+torch @ https://download.pytorch.org/whl/cu130/torch-2.11.0%2Bcu130-cp312-cp312-manylinux_2_28_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64' and python_version == '3.12'
+torch @ https://download.pytorch.org/whl/cu130/torch-2.11.0%2Bcu130-cp311-cp311-manylinux_2_28_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64' and python_version == '3.11'
 
-# Torchaudio — должен совпадать с torch (cu128). Без пина gigaam тянет новейший
-# torchaudio 2.11 (cu130), чья C-расширение требует libcudart.so.13 → OSError при import.
-torchaudio @ https://download.pytorch.org/whl/cu128/torchaudio-2.7.0%2Bcu128-cp313-cp313-manylinux_2_28_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64' and python_version == '3.13'
-torchaudio @ https://download.pytorch.org/whl/cu128/torchaudio-2.7.0%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64' and python_version == '3.12'
-torchaudio @ https://download.pytorch.org/whl/cu128/torchaudio-2.7.0%2Bcu128-cp311-cp311-manylinux_2_28_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64' and python_version == '3.11'
-
-# Linux FA2 from https://github.com/Dao-AILab/flash-attention/releases
-flash_attn @ https://github.com/kingbri1/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu128torch2.7.0cxx11abiFALSE-cp313-cp313-linux_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64' and python_version == '3.13'
-flash_attn @ https://github.com/kingbri1/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu128torch2.7.0cxx11abiFALSE-cp312-cp312-linux_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64' and python_version == '3.12'
-flash_attn @ https://github.com/kingbri1/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu128torch2.7.0cxx11abiFALSE-cp311-cp311-linux_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64' and python_version == '3.11'
+torchaudio @ https://download.pytorch.org/whl/cu130/torchaudio-2.11.0%2Bcu130-cp313-cp313-manylinux_2_28_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64' and python_version == '3.13'
+torchaudio @ https://download.pytorch.org/whl/cu130/torchaudio-2.11.0%2Bcu130-cp312-cp312-manylinux_2_28_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64' and python_version == '3.12'
+torchaudio @ https://download.pytorch.org/whl/cu130/torchaudio-2.11.0%2Bcu130-cp311-cp311-manylinux_2_28_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64' and python_version == '3.11'
 
 Flask==3.1.0
 flask-cors==4.0.0
 waitress==3.0.0
-scipy==1.13.1
-transformers==4.49.0
-accelerate==1.4.0
+scipy==1.15.2
+transformers==4.51.3
+accelerate==1.6.0
 python-magic==0.4.27
 requests==2.32.3
 
-# GigaAM (для model_type=gigaam)
+# GigaAM + pyannote (для model_type=gigaam, longform VAD)
 gigaam @ git+https://github.com/salute-developers/GigaAM.git
-pyannote-audio>=3.1  # для transcribe_longform (аудио > 25 секунд)
+pyannote-audio==4.0.4
