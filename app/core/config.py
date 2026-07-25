@@ -3,6 +3,7 @@
 Все дефолты централизованы в dataclass-определениях.
 """
 
+import dataclasses
 import json
 import logging
 from dataclasses import dataclass, field
@@ -38,6 +39,7 @@ class AppConfig:
     model_type: str = "whisper"
     models: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     model: Dict[str, Any] = field(default_factory=dict)
+    loaded_models: List[str] = field(default_factory=list)
     service_port: int = 5042
     return_timestamps: bool = False
     audio_rate: int = 16000
@@ -54,9 +56,23 @@ class AppConfig:
     version: str = "1.0.0"
     longform_threshold_s: float = 25.0
 
+    def for_model(self, name: str) -> "AppConfig":
+        """Возвращает копию конфига с активной моделью name.
+
+        Транскрайберы читают config.model / config.model_type — этот метод подменяет
+        их так, чтобы один экземпляр GigaAMTranscriber загружал именно указанную
+        модель. Словарь models разделяется по ссылке (поверхностная копия),
+        поэтому транскрайберы обязаны относиться к конфигу как к read-only.
+        """
+        return dataclasses.replace(
+            self,
+            model_type=name,
+            model=dict(self.models.get(name, {})),
+        )
+
 
 _PUBLIC_CONFIG_KEYS = frozenset({
-    "model_type", "version", "service_port", "return_timestamps",
+    "model_type", "loaded_models", "version", "service_port", "return_timestamps",
     "audio_rate", "enable_history", "max_history_days",
     "max_concurrent_inference", "log_level",
 })
@@ -86,6 +102,32 @@ def load_config(config_path: str) -> AppConfig:
         if not model_config:
             logger.warning("Секция models.%s пуста или отсутствует", model_type)
 
+        # Модель по умолчанию обязательна — без неё сервис бесполезен.
+        if model_type not in models:
+            raise ValueError(
+                f"Модель по умолчанию '{model_type}' отсутствует в секции models"
+            )
+
+        # Список одновременно загружаемых моделей. Если ключа нет — ведём себя как
+        # раньше: одна модель (модель по умолчанию).
+        loaded_models = raw.get("loaded_models") or [model_type]
+
+        # Модель по умолчанию обязана быть в loaded_models — добавляем в начало.
+        if model_type not in loaded_models:
+            loaded_models.insert(0, model_type)
+
+        # Каждое имя должно иметь секцию models.<name>; иначе пропускаем с ошибкой.
+        valid_models: List[str] = []
+        for name in loaded_models:
+            if name in models:
+                valid_models.append(name)
+            else:
+                logger.error(
+                    "Модель '%s' указана в loaded_models, но секция models.%s "
+                    "отсутствует — пропуск", name, name,
+                )
+        loaded_models = valid_models
+
         fv = raw.get("file_validation", {})
         file_validation = FileValidationConfig(
             max_file_size_mb=fv.get("max_file_size_mb", 100),
@@ -102,6 +144,7 @@ def load_config(config_path: str) -> AppConfig:
             model_type=model_type,
             models=models,
             model=dict(model_config),
+            loaded_models=loaded_models,
             service_port=raw.get("service_port", AppConfig.service_port),
             return_timestamps=raw.get("return_timestamps", AppConfig.return_timestamps),
             audio_rate=raw.get("audio_rate", AppConfig.audio_rate),

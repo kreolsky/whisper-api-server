@@ -101,7 +101,9 @@ The service is configured through the `config.json` file:
 | Parameter | Description |
 |-----------|-------------|
 | `service_port` | Port on which the service will run |
-| `model_path` | Path to the Whisper model directory |
+| `model_type` | Default model for requests without a `model` parameter |
+| `loaded_models` | List of model names to load at startup (the simultaneously-available set). Omit for the legacy single-model behaviour |
+| `model_path` | Path to the Whisper model directory (Whisper only; **unused by GigaAM**) |
 | `language` | Language for transcription (e.g., "russian", "english") |
 | `enable_history` | Whether to save transcription history (true/false) |
 | `max_history_days` | Number of days to keep transcription history before rotation |
@@ -113,13 +115,52 @@ The service is configured through the `config.json` file:
 | `audio_rate` | Audio sampling rate in Hz |
 | `norm_level` | Normalization level for audio preprocessing |
 | `compand_params` | Parameters for audio compression/expansion |
-| `device_id` | CUDA device index to use for inference |
+| `device_id` | CUDA device index per model (set inside each `models.<name>` section) |
 | `file_validation.max_file_size_mb` | Maximum allowed file size in megabytes |
 | `file_validation.allowed_extensions` | List of accepted audio file extensions |
 | `file_validation.allowed_mime_types` | List of accepted MIME types |
 | `log_level` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 | `log_file` | Path to the log file |
 | `request_logging.exclude_endpoints` | Endpoints excluded from request logging |
+
+### Multiple models (multi-GPU)
+
+The server can load several transcribers in one process, each pinned to its own
+GPU. Requests without `model` go to the default; requests with `model=<name>`
+are routed to the matching loaded model.
+
+Three top-level knobs in `config.json` drive this:
+
+- `model_type` — the **default** model.
+- `loaded_models` — the **list of model names to instantiate at startup**.
+- `device_id` inside each `models.<name>` section — **which GPU** that model runs on.
+
+```json
+{
+  "model_type": "gigaam",
+  "loaded_models": ["gigaam", "gigaam-multilingual"],
+  "models": {
+    "gigaam":             { "variant": "v3_e2e_rnnt",        "device_id": 0, "segmentation_model": "/path/to/segmentation" },
+    "gigaam-multilingual": { "variant": "multilingual_large_ctc", "device_id": 1, "segmentation_model": "/path/to/segmentation" }
+  }
+}
+```
+
+Notes:
+
+- An old config without `loaded_models` behaves exactly as before — one model.
+- `model_type` is always implicitly part of `loaded_models` (prepended if missing)
+  and must have a `models.<name>` section (startup fails fast otherwise).
+- A `loaded_models` entry without a `models.<name>` section is logged and skipped.
+- The **VAD** (pyannote segmentation) used by longform transcription is a single
+  shared pipeline. It is initialised by the **first** model in `loaded_models`
+  that has a `segmentation_model`, on that model's GPU — so the order of
+  `loaded_models` is load-bearing for VAD placement.
+- `max_concurrent_inference` is applied per transcriber instance, so each GPU
+  gets its own limit. Startup takes roughly as long as loading all models
+  sequentially — expect a longer window before `/health` turns green.
+- `CUDA_VISIBLE_DEVICES` must **not** be restricted for the service on a
+  multi-GPU host — all GPUs must be visible.
 
 ## Web interface
 
@@ -152,6 +193,8 @@ curl http://localhost:5042/config
 
 ### Get available models
 
+Lists every model loaded at startup (one entry per `loaded_models` entry):
+
 ```bash
 curl http://localhost:5042/v1/models
 ```
@@ -162,6 +205,19 @@ curl http://localhost:5042/v1/models
 curl -X POST http://localhost:5042/v1/audio/transcriptions \
   -F file=@audio.mp3
 ```
+
+A request without a `model` parameter is routed to the default model
+(`config.model_type`). To target a specific loaded model, pass `model=<name>`:
+
+```bash
+curl -X POST http://localhost:5042/v1/audio/transcriptions \
+  -F file=@audio.mp3 \
+  -F model=gigaam-multilingual
+```
+
+An unknown `model` value does **not** error — it falls back to the default model
+with a warning in the log. This keeps OpenAI SDK clients (which send
+`model=whisper-1`) and the bundled UI working unchanged.
 
 ### Transcribe from URL
 

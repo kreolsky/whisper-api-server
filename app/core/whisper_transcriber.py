@@ -3,11 +3,11 @@
 Обрабатывает выбор устройства (CPU, CUDA, MPS) и Flash Attention 2.
 """
 
-import time
+import logging
 import threading
+import time
 import traceback
 from typing import Dict, Tuple, Union
-import logging
 
 import numpy as np
 import torch
@@ -17,11 +17,12 @@ from transformers import (
     pipeline,
 )
 
-from .registry import register_model
-from .config import AppConfig
 from ..audio.processor import AudioProcessor
 from ..audio.utils import load_audio
 from ..infrastructure.storage import cleanup_temp_files
+from .config import AppConfig
+from .device import resolve_device
+from .registry import register_model
 
 logger = logging.getLogger('app.transcriber')
 
@@ -92,38 +93,12 @@ class WhisperTranscriber:
     def _get_device(self) -> torch.device:
         """
         Определение доступного устройства для вычислений.
-        
+        Делегирует централизованный выбор в resolve_device.
+
         Returns:
             Объект устройства PyTorch.
         """
-        if torch.cuda.is_available():
-            # Получаем device_id из конфигурации, по умолчанию 0
-            device_id = self.config.model.get("device_id", 0)
-            
-            # Проверяем, что device_id является целым числом
-            if not isinstance(device_id, int):
-                logger.warning("device_id должен быть целым числом, получено: %s. Используем значение по умолчанию 0", device_id)
-                device_id = 0
-            
-            # Проверяем, доступен ли запрошенный GPU
-            device_count = torch.cuda.device_count()
-            if device_id >= device_count:
-                logger.warning("Запрошенный GPU с индексом %s недоступен. Доступно GPU: %s. Используем GPU с индексом 0", device_id, device_count)
-                device_id = 0
-            
-            logger.info("Используется CUDA GPU с индексом %s для вычислений", device_id)
-            return torch.device(f"cuda:{device_id}")
-        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            logger.info("Используется MPS (Apple Silicon) для вычислений")
-            # Обходное решение для MPS: PyTorch проверяет is_initialized()
-            # при создании тензоров на MPS-устройстве, что вызывает ошибку
-            # в однопроцессном режиме.
-            # TODO: Удалить после обновления до PyTorch >= 2.5
-            setattr(torch.distributed, "is_initialized", lambda: False)
-            return torch.device("mps")
-        else:
-            logger.info("Используется CPU для вычислений")
-            return torch.device("cpu")
+        return resolve_device(self.config.model)
 
     def _get_torch_dtype(self) -> torch.dtype:
         """

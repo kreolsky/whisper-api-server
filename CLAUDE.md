@@ -20,9 +20,10 @@ Local, OpenAI-compatible speech recognition API service. Supports multiple ASR b
 
 * Entry: `server.py` -> `app/__init__.py` (WhisperServiceAPI)
 * Modules: `app/core/` (registry, transcribers, config, transcription service), `app/audio/` (processor, sources, utils), `app/infrastructure/` (logging, validation, storage, async tasks)
-* Request flow: source function -> validate -> `TranscriptionService.transcribe()` (AudioProcessor -> transcriber inference) -> save history -> JSON response
+* Request flow: source function -> validate -> `TranscriptionService.transcribe()` (ModelManager.resolve -> transcriber inference) -> save history -> JSON response
 * OpenAI-compatible API: `/v1/audio/transcriptions` matches OpenAI contract for drop-in replacement
 * All settings in `config.json`. Device fallback: CUDA -> MPS -> CPU
+* **Multi-model:** `ModelManager` (`app/core/model_manager.py`) holds N transcribers loaded at startup from `config.loaded_models`, each pinned to its own `device_id`; requests route by the `model` parameter, default = `config.model_type`. Unknown `model` falls back to default + warning. Builds on `docs/gigaam-multilingual-plan.md`.
 
 ### Transcriber registry
 

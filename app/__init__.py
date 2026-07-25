@@ -5,20 +5,21 @@
 
 __all__ = ['WhisperServiceAPI']
 
+import logging
 import os
 import signal
 import threading
-import logging
+
+import waitress
 from flask import Flask
 from flask_cors import CORS
-import waitress
 
-from .core import create_transcriber
+from .core import ModelManager
 from .core.config import load_config
-from .routes import Routes
-from .infrastructure.validation import FileValidator
-from .infrastructure.log import setup_logging, RequestLogger
 from .infrastructure.async_tasks import AsyncTaskManager
+from .infrastructure.log import RequestLogger, setup_logging
+from .infrastructure.validation import FileValidator
+from .routes import Routes
 
 
 class WhisperServiceAPI:
@@ -28,7 +29,7 @@ class WhisperServiceAPI:
     Attributes:
         config: Типизированная конфигурация (AppConfig).
         port: Порт для сервиса.
-        transcriber: Экземпляр транскрайбера.
+        model_manager: Менеджер загруженных моделей (маршрутизация по model).
         app: Flask-приложение.
         file_validator: Валидатор файлов.
     """
@@ -52,7 +53,9 @@ class WhisperServiceAPI:
         CORS(self.app)
         self.port = self.config.service_port
 
-        self.transcriber = create_transcriber(self.config)
+        # Жадная загрузка всех моделей из config.loaded_models; модель по
+        # умолчанию = config.model_type. При ошибке загрузки любой модели — fail.
+        self.model_manager = ModelManager(self.config)
         self.file_validator = FileValidator(self.config)
         self.task_manager = AsyncTaskManager()
         self._shutting_down = False
@@ -61,7 +64,7 @@ class WhisperServiceAPI:
 
         request_logger = RequestLogger(self.app, self.config.request_logging)
 
-        routes = Routes(self.app, self.transcriber, self.config, self.file_validator, self.task_manager)
+        routes = Routes(self.app, self.model_manager, self.config, self.file_validator, self.task_manager)
 
         self.logger.info("WhisperServiceAPI успешно инициализирован")
 

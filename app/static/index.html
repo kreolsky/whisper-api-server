@@ -355,6 +355,35 @@
             font-size: 14px;
             color: #666;
         }
+
+        .model-selector-row {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .model-selector-row label {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .model-select {
+            padding: 6px 10px;
+            font-size: 13px;
+            color: #333;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: #fff;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .model-select:disabled {
+            background-color: #f8f9fa;
+            cursor: default;
+        }
         
         .audio-player {
             width: 100%;
@@ -748,6 +777,12 @@
             
             <div class="right-panel">
                 <div class="player-container" id="player-container">
+                    <div class="model-selector-row">
+                        <label for="model-select">Model</label>
+                        <select id="model-select" class="model-select" disabled title="Recognition model">
+                            <option value="">default</option>
+                        </select>
+                    </div>
                     <div class="file-info" id="file-info">No file selected</div>
                     <audio id="audio-player" class="audio-player" controls disabled></audio>
                 </div>
@@ -847,6 +882,48 @@
             const filesContainer = document.getElementById('files-container');
             const noFilesMessage = document.getElementById('no-files-message');
             const clearQueueBtn = document.getElementById('clear-queue-btn');
+            const modelSelect = document.getElementById('model-select');
+
+            // Build an API URL respecting the nginx proxy path.
+            function buildApiUrl(path) {
+                if (window.location.pathname.includes(proxyPath)) {
+                    return `${proxyPath}${path}`;
+                }
+                return path;
+            }
+
+            // Populate the model selector from /v1/models; default = /health.model.
+            function initModelSelector() {
+                Promise.all([
+                    fetch(buildApiUrl('/health')).then(r => r.ok ? r.json() : Promise.reject()),
+                    fetch(buildApiUrl('/v1/models')).then(r => r.ok ? r.json() : Promise.reject()),
+                ]).then(([health, modelsResp]) => {
+                    const models = (modelsResp.data || []).map(m => m.id).filter(Boolean);
+                    if (!models.length) {
+                        return;
+                    }
+                    modelSelect.innerHTML = '';
+                    // First option = server default (sends no `model` field).
+                    const defaultOpt = document.createElement('option');
+                    defaultOpt.value = '';
+                    defaultOpt.textContent = `${health.model || 'default'} (default)`;
+                    modelSelect.appendChild(defaultOpt);
+                    models.forEach(id => {
+                        const opt = document.createElement('option');
+                        opt.value = id;
+                        opt.textContent = id;
+                        modelSelect.appendChild(opt);
+                    });
+                    modelSelect.value = '';
+                    modelSelect.disabled = false;
+                }).catch(() => {
+                    // Endpoint unavailable — keep disabled default; requests fall
+                    // through to the server default model.
+                    modelSelect.disabled = true;
+                });
+            }
+
+            initModelSelector();
             
             // Tab navigation
             const transcriptTabBtn = document.getElementById('transcript-tab-btn');
@@ -1280,7 +1357,11 @@
                 
                 const formData = new FormData();
                 formData.append('file', file);
-                formData.append('model', 'whisper-1');
+                // Send `model` only when a specific model is selected; empty value
+                // lets the request fall through to the server default.
+                if (modelSelect && modelSelect.value) {
+                    formData.append('model', modelSelect.value);
+                }
                 
                 // Show upload progress indicator
                 uploadProgress.style.display = 'block';

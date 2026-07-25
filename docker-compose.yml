@@ -5,16 +5,22 @@ services:
     restart: unless-stopped
     ports:
       - "5042:5042"
+    environment:
+      # gigaam разрешает кэш через os.path.expanduser("~/.cache/gigaam"),
+      # т.е. относительно HOME. Контейнер работает от root (HOME=/root),
+      # кэш с предзагруженными весами проброшен с хоста.
+      - HOME=/root
     volumes:
       - .:/app                                                          # код — обновление без пересборки
-      - /home/text-generation/models:/home/text-generation/models:ro   # модели
+      - /home/text-generation/models:/home/text-generation/models:ro   # модели (whisper, сегментация)
+      - /home/serge/.cache/gigaam:/root/.cache/gigaam                  # веса gigaam (rnnt + multilingual_large_ctc)
       - whisper-logs:/app/logs                                          # логи переживают пересоздание контейнера
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: all                                               # нужны обе GPU (gigaam на 0, multilingual на 1)
               capabilities: [gpu]
 
 volumes:

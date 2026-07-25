@@ -1,8 +1,19 @@
 """Модуль core — основные компоненты сервиса распознавания речи."""
 
-from .config import AppConfig
-from .registry import register_model, discover_transcribers, get_transcriber_class
 from .base import Transcriber
+from .config import AppConfig
+from .model_manager import ModelManager
+from .registry import discover_transcribers, get_transcriber_class, register_model
+
+__all__ = [
+    "AppConfig",
+    "ModelManager",
+    "Transcriber",
+    "create_transcriber",
+    "discover_transcribers",
+    "get_transcriber_class",
+    "register_model",
+]
 
 
 def create_transcriber(config: AppConfig) -> Transcriber:

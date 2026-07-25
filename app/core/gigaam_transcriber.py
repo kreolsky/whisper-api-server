@@ -3,18 +3,23 @@
 GigaAM самостоятельно обрабатывает аудио через ffmpeg, AudioProcessor не используется.
 """
 
+import logging
 import os
-import time
 import threading
+import time
 import traceback
 from typing import Dict, Tuple, Union
-import logging
 
-from .registry import register_model
-from .config import AppConfig
 from ..audio.utils import get_audio_duration
+from .config import AppConfig
+from .device import resolve_device
+from .registry import register_model
 
 logger = logging.getLogger('app.gigaam_transcriber')
+
+# Модульный флаг: VAD-пайплайн (gigaam.vad_utils._PIPELINE) строится один раз.
+# См. _init_vad_pipeline и §4 плана multi-model.
+_vad_initialized = False
 
 
 @register_model("gigaam")
@@ -42,6 +47,9 @@ class GigaAMTranscriber:
         self.return_timestamps = config.return_timestamps
         self._longform_threshold_s = config.longform_threshold_s
 
+        # Устройство, на котором живёт эта модель (фиксируется на загрузке).
+        self.device = resolve_device(model_config)
+
         max_concurrent = config.max_concurrent_inference
         self._inference_lock = threading.Semaphore(max_concurrent)
 
@@ -66,7 +74,7 @@ class GigaAMTranscriber:
         """
         import gigaam
 
-        logger.info("Загрузка модели GigaAM: %s", self.variant)
+        logger.info("Загрузка модели GigaAM: %s (device=%s)", self.variant, self.device)
 
         try:
             from .gigaam_patches import patch_load_audio
@@ -75,8 +83,11 @@ class GigaAMTranscriber:
             raise RuntimeError(f"Ошибка при патчинге gigaam.load_audio (возможно, несовместимая версия gigaam): {e}") from e
 
         try:
-            self.model = gigaam.load_model(self.variant)
-            logger.info("Модель GigaAM успешно загружена и готова к использованию")
+            self.model = self._load_gigaam_model(gigaam)
+            logger.info(
+                "Модель GigaAM успешно загружена и готова к использованию: "
+                "%s (device=%s)", self.variant, self.device,
+            )
         except Exception as e:
             logger.error("Ошибка при загрузке модели GigaAM: %s", e)
             raise
@@ -85,29 +96,79 @@ class GigaAMTranscriber:
         if segmentation_path:
             self._init_vad_pipeline(segmentation_path)
 
+    def _load_gigaam_model(self, gigaam):
+        """Загружает gigaam-модель, явно фиксируя её на self.device.
+
+        gigaam.load_model принимает device не во всех версиях библиотеки —
+        сначала пробуем именованный аргумент, при отказе откатываемся на
+        torch.cuda.device(...) context (только для CUDA) + model.to(device)
+        (открытый вопрос #3 плана).
+        """
+        try:
+            return gigaam.load_model(self.variant, device=str(self.device))
+        except TypeError as e:
+            # Откат только при реальном несовпадении сигнатуры, а не при любой
+            # внутренней TypeError модели.
+            if "unexpected keyword argument" not in str(e) and "device" not in str(e):
+                raise
+            logger.debug(
+                "gigaam.load_model не принимает device — фиксируем устройство "
+                "через контекстный менеджер/torch.device + model.to()"
+            )
+            import torch
+            if self.device.type == "cuda":
+                with torch.cuda.device(self.device):
+                    model = gigaam.load_model(self.variant)
+            else:
+                model = gigaam.load_model(self.variant)
+            return model.to(self.device)
+
     def _init_vad_pipeline(self, model_path: str) -> None:
         """
         Инициализация pyannote VAD-пайплайна из локального пути к модели.
+
+        Идемпотентна: модульный флаг _vad_initialized гарантирует, что пайплайн
+        строится один раз. Порядок loaded_models нагрузко-несущий — VAD живёт на
+        устройстве первой модели, которая его инициализирует (см. §4 плана).
+        Вторая модель пропускает инициализацию с debug-сообщением: VAD только
+        размечает границы сегментов, одного общего пайплайна хватает для всех
+        моделей.
         """
+        global _vad_initialized
+        if _vad_initialized:
+            logger.debug(
+                "VAD-пайплайн уже инициализирован — пропуск (модель %s, device=%s)",
+                self.variant, self.device,
+            )
+            return
+
         os.environ["PYANNOTE_METRICS_ENABLED"] = "0"
 
         import gigaam.vad_utils as vad_utils
         from pyannote.audio import Model
         from pyannote.audio.pipelines import VoiceActivityDetection
 
-        logger.info("Загрузка модели сегментации из: %s", model_path)
+        logger.info(
+            "Загрузка модели сегментации из: %s (VAD на device=%s)",
+            model_path, self.device,
+        )
         try:
             model = Model.from_pretrained(model_path)
             pipeline = VoiceActivityDetection(segmentation=model)
             pipeline.instantiate({"min_duration_on": 0.0, "min_duration_off": 0.0})
+            # Опционально фиксируем pyannote на выбранном GPU; по умолчанию —
+            # устройство первой инициализирующей модели.
+            pipeline.to(self.device)
             vad_utils._PIPELINE = pipeline
-            logger.info("Модель сегментации успешно загружена")
+            _vad_initialized = True
+            logger.info("Модель сегментации успешно загружена (device=%s)", self.device)
         except Exception as e:
             logger.error("Ошибка при загрузке модели сегментации: %s", e)
             raise
 
         try:
-            from .gigaam_patches import patch_segment_audio_file
+            from .gigaam_patches import patch_segment_audio_file, set_vad_device
+            set_vad_device(self.device)
             patch_segment_audio_file()
         except Exception as e:
             raise RuntimeError(f"Ошибка при патчинге segment_audio_file: {e}") from e

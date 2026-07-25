@@ -4,14 +4,15 @@
 контролирует параллелизм).
 """
 
-import time
+import logging
 import threading
+import time
 import traceback
 from typing import Dict, Tuple
-import logging
 
-from .config import AppConfig
 from ..history import save_history
+from .config import AppConfig
+from .model_manager import ModelManager
 
 logger = logging.getLogger('app.transcription_service')
 
@@ -19,8 +20,8 @@ logger = logging.getLogger('app.transcription_service')
 class TranscriptionService:
     """Сервис для транскрибации аудиофайлов."""
 
-    def __init__(self, transcriber, config: AppConfig):
-        self.transcriber = transcriber
+    def __init__(self, model_manager: ModelManager, config: AppConfig):
+        self.model_manager = model_manager
         self.config = config
 
     def transcribe(self, file_path: str, filename: str, params: Dict = None) -> Tuple[Dict, int]:
@@ -30,13 +31,18 @@ class TranscriptionService:
         Args:
             file_path: Путь к аудиофайлу.
             filename: Имя файла (для логов и истории).
-            params: Дополнительные параметры для транскрибации.
+            params: Дополнительные параметры для транскрибации (в т.ч. 'model').
 
         Returns:
             Кортеж (JSON-ответ, HTTP-код).
         """
         params = params or {}
-        language = params.get('language') or self.config.model.get('language', 'en')
+
+        # Маршрутизация запроса на выбранную модель (по умолчанию — config.model_type).
+        model_name, transcriber = self.model_manager.resolve(params.get("model"))
+        model_config = self.config.models.get(model_name, {})
+
+        language = params.get('language') or model_config.get('language', 'en')
         temperature = max(0.0, min(1.0, float(params.get('temperature', 0.0))))
         prompt = params.get('prompt', '')
 
@@ -53,7 +59,7 @@ class TranscriptionService:
 
             def _run():
                 try:
-                    result_box[0] = self.transcriber.process_file(
+                    result_box[0] = transcriber.process_file(
                         file_path, return_timestamps=return_timestamps,
                         language=language, temperature=temperature,
                         prompt=prompt
@@ -63,6 +69,7 @@ class TranscriptionService:
                 finally:
                     done.set()
 
+            logger.info("Транскрибация '%s' моделью '%s'", filename, model_name)
             worker = threading.Thread(target=_run, daemon=True)
             worker.start()
 
@@ -82,14 +89,14 @@ class TranscriptionService:
                     "text": result.get("text", ""),
                     "processing_time": processing_time,
                     "duration_seconds": duration,
-                    "model": self.config.model_type
+                    "model": model_name
                 }
             else:
                 response = {
                     "text": result,
                     "processing_time": processing_time,
                     "duration_seconds": duration,
-                    "model": self.config.model_type
+                    "model": model_name
                 }
 
             save_history(response, filename, self.config)

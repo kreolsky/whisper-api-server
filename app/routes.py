@@ -5,19 +5,19 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict
 
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify, request
 
+from .audio.sources import get_base64_file, get_uploaded_file, get_url_file
 from .core.config import AppConfig, config_to_public_dict
+from .core.model_manager import ModelManager
 from .core.transcription_service import TranscriptionService
-from .audio.sources import get_uploaded_file, get_url_file, get_base64_file
-from .infrastructure.validation import ValidationError
-from .infrastructure.storage import cleanup_temp_files
 from .infrastructure.async_tasks import AsyncTaskManager
+from .infrastructure.storage import cleanup_temp_files
+from .infrastructure.validation import ValidationError
 
 if TYPE_CHECKING:
-    from .core.base import Transcriber
     from .infrastructure.validation import FileValidator
 
 logger = logging.getLogger('app.routes')
@@ -26,12 +26,13 @@ logger = logging.getLogger('app.routes')
 class Routes:
     """Класс для регистрации всех эндпоинтов API."""
 
-    def __init__(self, app: Flask, transcriber: Transcriber,
+    def __init__(self, app: Flask, model_manager: ModelManager,
                  config: AppConfig, file_validator: FileValidator,
                  task_manager: AsyncTaskManager):
         self.app = app
         self.config = config
-        self.transcription_service = TranscriptionService(transcriber, config)
+        self.model_manager = model_manager
+        self.transcription_service = TranscriptionService(model_manager, config)
         self.file_validator = file_validator
         self.task_manager = task_manager
         self._max_size = config.file_validation.max_file_size_mb
@@ -58,12 +59,13 @@ class Routes:
         @self.app.route('/health', methods=['GET'])
         def health_check():
             """Эндпоинт для проверки статуса сервиса."""
-            if not self.transcription_service.transcriber.is_ready:
+            if not self.model_manager.is_ready:
                 return jsonify({"status": "unhealthy", "error": "Model not loaded"}), 503
             return jsonify({
                 "status": "ok",
                 "version": self.config.version,
-                "model": self.config.model_type
+                "model": self.model_manager.default_name,
+                "models": self.model_manager.available()
             }), 200
 
         @self.app.route('/config', methods=['GET'])
@@ -73,32 +75,33 @@ class Routes:
 
         @self.app.route('/v1/models', methods=['GET'])
         def list_models():
-            """Эндпоинт для получения списка доступных моделей."""
-            model_id = self.config.model_type
-            return jsonify({
-                "data": [{
+            """Эндпоинт для получения списка доступных (загруженных) моделей."""
+            data = []
+            for model_id in self.model_manager.available():
+                data.append({
                     "id": model_id,
                     "object": "model",
-                    "owned_by": "ai-sage" if model_id == "gigaam" else "openai",
+                    "owned_by": "ai-sage" if model_id.startswith("gigaam") else "openai",
                     "permissions": []
-                }],
-                "object": "list"
-            }), 200
+                })
+            return jsonify({"data": data, "object": "list"}), 200
 
         @self.app.route('/v1/models/<model_id>', methods=['GET'])
         def retrieve_model(model_id):
             """Эндпоинт для получения информации о конкретной модели."""
-            active_id = self.config.model_type
-            if model_id == active_id:
+            if model_id in self.model_manager.available():
                 return jsonify({
                     "id": model_id,
                     "object": "model",
-                    "owned_by": "ai-sage" if model_id == "gigaam" else "openai",
+                    "owned_by": "ai-sage" if model_id.startswith("gigaam") else "openai",
                     "permissions": []
                 }), 200
             return jsonify({
                 "error": "Model not found",
-                "details": f"Model '{model_id}' does not exist"
+                "details": {
+                    "requested": model_id,
+                    "available": self.model_manager.available(),
+                }
             }), 404
 
         @self.app.route('/v1/audio/transcriptions', methods=['POST'])
